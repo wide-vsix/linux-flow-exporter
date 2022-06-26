@@ -1,7 +1,3 @@
-# linux-flow-exporter
-eBPF based IPFIX/NetFlow exporter
-
-```yaml
 collectors:
 - address: 10.146.0.6:2100
 templates:
@@ -12,7 +8,12 @@ templates:
   - OctetDeltaCount
   - PacketDeltaCount
   - IpVersion
+  - IngressInterface
+  - EgressInterface
   - FlowDirection
   - SourceIPv4Address
   - DestinationIPv4Address
-```
+  - SourceTransportPort
+  - DestinationTransportPort
+  - TcpControlBits
+  - ProtocolIdentifier
