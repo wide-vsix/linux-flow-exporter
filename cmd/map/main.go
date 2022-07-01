@@ -60,6 +60,12 @@ func fn(cmd *cobra.Command, args []string) error {
 	}
 	pp.Println(m.Type().String())
 
+	info, err := m.Info()
+	if err != nil {
+		return err
+	}
+	pp.Println(info)
+
 	key := FlowKey{}
 	vals := []FlowVal{}
 	entries := m.Iterate()
