@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"time"
 
+	"github.com/cilium/ebpf"
 	"github.com/spf13/cobra"
 )
 
@@ -17,23 +17,31 @@ var config struct {
 func newCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "cmd",
-		RunE: appMain,
+		RunE: fn,
 	}
-	cmd.Flags().StringVar(&config.arg1, "arg1", "def1", "this is arg1")
-	cmd.Flags().StringVar(&config.arg2, "arg2", "def2", "this is arg2")
+	// cmd.Flags().StringVar(&config.arg1, "arg1", "def1", "this is arg1")
+	// cmd.Flags().StringVar(&config.arg2, "arg2", "def2", "this is arg2")
 	return cmd
-}
-
-func appMain(cmd *cobra.Command, args []string) error {
-	fmt.Printf("arg1=%s, arg2=%s\n", config.arg1, config.arg2)
-	return nil
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	command := newCommand()
-	err := command.Execute()
-	if err != nil {
+	if err := newCommand().Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func fn(cmd *cobra.Command, args []string) error {
+	arr, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type:       ebpf.PerCPUArray,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 2,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	pp.Println(arr)
+	return nil
 }
