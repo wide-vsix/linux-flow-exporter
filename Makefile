@@ -3,4 +3,4 @@ build:
 run: build
 	./bin/a.out
 
-include ./cmd/*/Makefile
+include ./cmd/*/sub.mk
