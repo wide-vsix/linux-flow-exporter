@@ -81,12 +81,16 @@ func fn(cmd *cobra.Command, args []string) error {
 				sum += val.Cnt
 			}
 			fmt.Printf("%s -> %d\n", key.String(), sum)
+
+			// UPDATE
+			if err := m.Update(key, []FlowVal{{Cnt: 0}}, ebpf.UpdateExist); err != nil {
+				return err
+			}
+			fmt.Printf("updated\n")
 		}
 		if err := entries.Err(); err != nil {
 			panic(err)
 		}
-
-		// TODO(slankdev): Update as 0
 	}
 	println("bye...")
 	return nil
