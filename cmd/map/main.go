@@ -11,21 +11,15 @@ import (
 )
 
 var config struct {
-	arg1 string
-	arg2 string
+	mapID int
 }
-
-var (
-	mapID ebpf.MapID = 4088
-)
 
 func newCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "cmd",
 		RunE: fn,
 	}
-	// cmd.Flags().StringVar(&config.arg1, "arg1", "def1", "this is arg1")
-	// cmd.Flags().StringVar(&config.arg2, "arg2", "def2", "this is arg2")
+	cmd.Flags().IntVarP(&config.mapID, "mapid", "m", 4088, "ebpf map-id")
 	return cmd
 }
 
@@ -37,18 +31,7 @@ func main() {
 }
 
 func fn(cmd *cobra.Command, args []string) error {
-	// arr, err := ebpf.NewMap(&ebpf.MapSpec{
-	// 	Type:       ebpf.PerCPUArray,
-	// 	KeySize:    4,
-	// 	ValueSize:  4,
-	// 	MaxEntries: 2,
-	// })
-	// if err != nil {
-	//     return err
-	// }
-	// pp.Println(arr)
-
-	m, err := ebpf.NewMapFromID(mapID)
+	m, err := ebpf.NewMapFromID(ebpf.MapID(config.mapID))
 	if err != nil {
 		return err
 	}
