@@ -72,12 +72,10 @@ func fn(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// fmt.Printf("%d\n", id)
 		key := FlowKey{}
 		vals := []FlowVal{}
 		entries := m.Iterate()
 		for entries.Next(&key, &vals) {
-			// fmt.Printf("-----\n")
 			sum := uint32(0)
 			for _, val := range vals {
 				sum += val.Cnt
@@ -88,6 +86,7 @@ func fn(cmd *cobra.Command, args []string) error {
 			panic(err)
 		}
 
+		// TODO(slankdev): Update as 0
 	}
 	println("bye...")
 	return nil
