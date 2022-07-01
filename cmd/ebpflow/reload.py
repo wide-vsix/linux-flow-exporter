@@ -38,7 +38,7 @@ for link in links:
           break
     if not filter_configured:
       execute(f"tc filter add dev {link['ifname']} ingress "+
-        "pref 100 bpf obj filter.bpf.o section tc-ingress", nojson=True)
+        "pref 100 bpf obj cmd/ebpflow/filter.bpf.o section tc-ingress", nojson=True)
       print(f"{link['ifname']}/filter configured")
     else:
       print(f"{link['ifname']}/filter unchanged")
