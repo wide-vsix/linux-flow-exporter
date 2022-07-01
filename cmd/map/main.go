@@ -60,6 +60,30 @@ func fn(cmd *cobra.Command, args []string) error {
 	}
 	pp.Println(m.Type().String())
 
+	fmt.Println("---------")
+	for id := ebpf.MapID(0); ; {
+		var err error
+		id, err = ebpf.MapGetNextID(ebpf.MapID(id))
+		if err != nil {
+			break
+		}
+
+		mm, err := ebpf.NewMapFromID(id)
+		if err != nil {
+			return err
+		}
+		info, err := mm.Info()
+		if err != nil {
+			return err
+		}
+		if info.Name != "flow_stats" {
+			continue
+		}
+
+		fmt.Printf("%d\n", id)
+	}
+	fmt.Println("---------")
+
 	info, err := m.Info()
 	if err != nil {
 		return err
