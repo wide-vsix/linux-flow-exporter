@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/binary"
+	"fmt"
 	"math/rand"
+	"net"
 	"os"
 	"time"
 
@@ -30,12 +33,48 @@ func main() {
 	}
 }
 
+func int2ip(nn uint32) net.IP {
+	ip := make(net.IP, 4)
+	binary.LittleEndian.PutUint32(ip, nn)
+	return ip
+}
+
+type FlowKey struct {
+	Daddr uint32
+	Dport uint16
+}
+
+func (k FlowKey) String() string {
+	ipaddr := int2ip(k.Daddr)
+	return fmt.Sprintf("%s:%d", ipaddr.String(), k.Dport)
+}
+
+type FlowVal struct {
+	Cnt uint32
+}
+
 func fn(cmd *cobra.Command, args []string) error {
 	m, err := ebpf.NewMapFromID(ebpf.MapID(config.mapID))
 	if err != nil {
 		return err
 	}
-	pp.Println(m)
+	pp.Println(m.Type().String())
 
+	key := FlowKey{}
+	vals := []FlowVal{}
+	entries := m.Iterate()
+	for entries.Next(&key, &vals) {
+		// fmt.Printf("-----\n")
+		sum := uint32(0)
+		for _, val := range vals {
+			sum += val.Cnt
+		}
+		fmt.Printf("%s -> %d\n", key.String(), sum)
+	}
+	if err := entries.Err(); err != nil {
+		panic(err)
+	}
+
+	println("bye...")
 	return nil
 }
