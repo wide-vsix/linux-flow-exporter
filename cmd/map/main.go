@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/k0kubun/pp"
 	"github.com/spf13/cobra"
 )
 
@@ -13,6 +14,10 @@ var config struct {
 	arg1 string
 	arg2 string
 }
+
+var (
+	mapID ebpf.MapID = 4088
+)
 
 func newCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -32,16 +37,22 @@ func main() {
 }
 
 func fn(cmd *cobra.Command, args []string) error {
-	arr, err := ebpf.NewMap(&ebpf.MapSpec{
-		Type:       ebpf.PerCPUArray,
-		KeySize:    4,
-		ValueSize:  4,
-		MaxEntries: 2,
-	})
-	if err != nil {
-		panic(err)
-	}
+	// arr, err := ebpf.NewMap(&ebpf.MapSpec{
+	// 	Type:       ebpf.PerCPUArray,
+	// 	KeySize:    4,
+	// 	ValueSize:  4,
+	// 	MaxEntries: 2,
+	// })
+	// if err != nil {
+	//     return err
+	// }
+	// pp.Println(arr)
 
-	pp.Println(arr)
+	m, err := ebpf.NewMapFromID(mapID)
+	if err != nil {
+		return err
+	}
+	pp.Println(m)
+
 	return nil
 }
