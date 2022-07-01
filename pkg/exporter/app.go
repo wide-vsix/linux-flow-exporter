@@ -65,15 +65,14 @@ type IPFixMessage struct {
 type IPFixHeader struct {
 	VersionNumber  uint16
 	SysupTime      uint32
-	UnixSecs       uint32
 	SequenceNumber uint32
 	SourceID       uint32
 }
 
 type IPFixFlowSet struct {
-	FlowSetID uint16
-	Template  IPFixFlowTemplate
-	Flow      []IPFixFlow
+	FlowSetID uint16            `yaml:"flowSetId"`
+	Template  IPFixFlowTemplate `yaml:"template,omitempty"`
+	Flow      []IPFixFlow       `yaml:"flow"`
 }
 
 // https://www.rfc-editor.org/rfc/rfc3954.html#section-5.2
@@ -135,19 +134,32 @@ func udptransmit(dst string, buf *bytes.Buffer) error {
 }
 
 func (m *IPFixMessage) ToBuffer(buf *bytes.Buffer) error {
+	cnt := 16 // ipfix message header length (const)
+	for _, fs := range m.FlowSets {
+		cnt += 4               // ipfix flowset header length (const)
+		if fs.FlowSetID == 0 { // template
+			cnt += 4
+			cnt += 4 * len(fs.Template.Fields)
+		} else { // flow
+			l, err := getTemplateLength(int(fs.FlowSetID))
+			if err != nil {
+				return err
+			}
+			cnt += l + 4
+		}
+	}
+
 	// https://www.rfc-editor.org/rfc/rfc3954.html#section-5.1
 	if err := binary.Write(buf, binary.BigEndian, &struct {
 		VersionNumber  uint16
 		Count          uint16
 		SysupTime      uint32
-		UnixSecs       uint32
 		SequenceNumber uint32
 		SourceID       uint32
 	}{
 		VersionNumber:  m.Header.VersionNumber,
-		Count:          uint16(len(m.FlowSets)),
+		Count:          uint16(cnt),
 		SysupTime:      m.Header.SysupTime,
-		UnixSecs:       m.Header.UnixSecs,
 		SequenceNumber: m.Header.SequenceNumber,
 		SourceID:       m.Header.SourceID,
 	}); err != nil {
@@ -175,7 +187,7 @@ func (fs *IPFixFlowSet) ToBuffer(buf *bytes.Buffer) error {
 			TemplateID uint16
 			FieldCount uint16
 		}{
-			fs.FlowSetID,
+			2, // TODO(slankdev): 2 is FLOW-TEMPLATE
 			uint16(flowsetlen),
 			fs.Template.TemplateID,
 			uint16(len(fs.Template.Fields)),
