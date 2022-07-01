@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
-	"github.com/k0kubun/pp"
 	"github.com/spf13/cobra"
 )
 
@@ -54,13 +53,6 @@ type FlowVal struct {
 }
 
 func fn(cmd *cobra.Command, args []string) error {
-	m, err := ebpf.NewMapFromID(ebpf.MapID(config.mapID))
-	if err != nil {
-		return err
-	}
-	pp.Println(m.Type().String())
-
-	fmt.Println("---------")
 	for id := ebpf.MapID(0); ; {
 		var err error
 		id, err = ebpf.MapGetNextID(ebpf.MapID(id))
@@ -68,43 +60,35 @@ func fn(cmd *cobra.Command, args []string) error {
 			break
 		}
 
-		mm, err := ebpf.NewMapFromID(id)
+		m, err := ebpf.NewMapFromID(id)
 		if err != nil {
 			return err
 		}
-		info, err := mm.Info()
+		info, err := m.Info()
 		if err != nil {
 			return err
 		}
-		if info.Name != "flow_stats" {
+		if info.Name != "flow_stats" || info.Type != ebpf.PerCPUHash {
 			continue
 		}
 
-		fmt.Printf("%d\n", id)
-	}
-	fmt.Println("---------")
-
-	info, err := m.Info()
-	if err != nil {
-		return err
-	}
-	pp.Println(info)
-
-	key := FlowKey{}
-	vals := []FlowVal{}
-	entries := m.Iterate()
-	for entries.Next(&key, &vals) {
-		// fmt.Printf("-----\n")
-		sum := uint32(0)
-		for _, val := range vals {
-			sum += val.Cnt
+		// fmt.Printf("%d\n", id)
+		key := FlowKey{}
+		vals := []FlowVal{}
+		entries := m.Iterate()
+		for entries.Next(&key, &vals) {
+			// fmt.Printf("-----\n")
+			sum := uint32(0)
+			for _, val := range vals {
+				sum += val.Cnt
+			}
+			fmt.Printf("%s -> %d\n", key.String(), sum)
 		}
-		fmt.Printf("%s -> %d\n", key.String(), sum)
-	}
-	if err := entries.Err(); err != nil {
-		panic(err)
-	}
+		if err := entries.Err(); err != nil {
+			panic(err)
+		}
 
+	}
 	println("bye...")
 	return nil
 }
