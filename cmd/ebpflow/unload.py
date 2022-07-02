@@ -15,7 +15,8 @@ def execute(cmd, nojson=False):
 
 links = execute("ip -j link")
 for link in links:
-  if link["ifname"].startswith("ens4") or link["ifname"].startswith("veth"):
+  # if link["ifname"].startswith("ens4") or link["ifname"].startswith("veth"):
+  if link["ifname"].startswith("veth"):
     qdisc_configured = False
     for qdisc in execute(f"tc -j qdisc list dev {link['ifname']} clsact"):
       if qdisc["kind"] == "clsact" and \
