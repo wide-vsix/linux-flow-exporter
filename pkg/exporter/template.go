@@ -79,9 +79,8 @@ func generateIPFixTemplate() ([]IPFixMessage, error) {
 	flowsets = append(flowsets, dummyFlowSetData())
 	msg := IPFixMessage{
 		Header: IPFixHeader{
-			VersionNumber:  9,
+			VersionNumber:  10,
 			SysupTime:      0x00002250,
-			UnixSecs:       0x62b7f72d,
 			SequenceNumber: 1,
 			SourceID:       0,
 		},
