@@ -1,7 +1,7 @@
 collectors:
-- address: 10.146.0.6:2100
+- address: 35.194.97.218:2055
 templates:
-- id: 1024
+- id: 1031
   template:
   - FlowEndMilliseconds
   - FlowStartMilliseconds
@@ -17,3 +17,20 @@ templates:
   - DestinationTransportPort
   - TcpControlBits
   - ProtocolIdentifier
+flowsets:
+- flowSetId: 1031
+  flow:
+  - FlowEndMilliseconds:      0x000001819e9d896b
+    FlowStartMilliseconds:    0x0000000000002118
+    OctetDeltaCount:          8482
+    PacketDeltaCount:         80
+    IpVersion:                4
+    IngressInterface:         0
+    EgressInterface:          0
+    FlowDirection:            0
+    SourceIPv4Address:        0x0a000001
+    DestinationIPv4Address:   0x0a000002
+    SourceTransportPort:      22
+    DestinationTransportPort: 63153
+    TcpControlBits:           0x18
+    ProtocolIdentifier:       6

@@ -26,20 +26,20 @@ import (
 )
 
 type IPFixFlow struct {
-	FlowEndMilliseconds      uint64
-	FlowStartMilliseconds    uint64
-	OctetDeltaCount          uint64
-	PacketDeltaCount         uint64
-	IpVersion                uint8
-	IngressInterface         uint32
-	EgressInterface          uint32
-	FlowDirection            uint8
-	SourceIPv4Address        uint32
-	DestinationIPv4Address   uint32
-	SourceTransportPort      uint16
-	DestinationTransportPort uint16
-	TcpControlBits           uint8
-	ProtocolIdentifier       uint8
+	FlowEndMilliseconds      uint64 `yaml:"FlowEndMilliseconds"`
+	FlowStartMilliseconds    uint64 `yaml:"FlowStartMilliseconds"`
+	OctetDeltaCount          uint64 `yaml:"OctetDeltaCount"`
+	PacketDeltaCount         uint64 `yaml:"PacketDeltaCount"`
+	IpVersion                uint8  `yaml:"IpVersion"`
+	IngressInterface         uint32 `yaml:"IngressInterface"`
+	EgressInterface          uint32 `yaml:"EgressInterface"`
+	FlowDirection            uint8  `yaml:"FlowDirection"`
+	SourceIPv4Address        uint32 `yaml:"SourceIPv4Address"`
+	DestinationIPv4Address   uint32 `yaml:"DestinationIPv4Address"`
+	SourceTransportPort      uint16 `yaml:"SourceTransportPort"`
+	DestinationTransportPort uint16 `yaml:"DestinationTransportPort"`
+	TcpControlBits           uint8  `yaml:"TcpControlBits"`
+	ProtocolIdentifier       uint8  `yaml:"ProtocolIdentifier"`
 }
 
 var ipfixfields = []fieldTableItem{

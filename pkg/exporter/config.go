@@ -34,6 +34,7 @@ type ExporterConfig struct {
 		ID       uint16   `yaml:"id"`
 		Template []string `yaml:"template"`
 	} `yaml:"templates"`
+	FlowSets []IPFixFlowSet `yaml:"flowsets"`
 }
 
 func (cfg *ExporterConfig) Read(filename string) error {

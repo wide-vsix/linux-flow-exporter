@@ -71,9 +71,9 @@ type IPFixHeader struct {
 }
 
 type IPFixFlowSet struct {
-	FlowSetID uint16
-	Template  IPFixFlowTemplate
-	Flow      []IPFixFlow
+	FlowSetID uint16            `yaml:"flowSetId"`
+	Template  IPFixFlowTemplate `yaml:"template,omitempty"`
+	Flow      []IPFixFlow       `yaml:"flow"`
 }
 
 // https://www.rfc-editor.org/rfc/rfc3954.html#section-5.2
