@@ -1,5 +1,5 @@
 # linux-flow-exporter
-eBPF based IPFIX/NetFlow exporter
+eBPF based IPFIX/NetFlow exporter.
 
 ```yaml
 collectors:
@@ -16,3 +16,7 @@ templates:
   - SourceIPv4Address
   - DestinationIPv4Address
 ```
+
+## Limitation
+
+This software works ONLY for tcp.

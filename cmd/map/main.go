@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/spf13/cobra"
+	"github.com/wide-vsix/linux-flow-exporter/pkg/exporter"
+	"github.com/wide-vsix/linux-flow-exporter/pkg/util"
 )
 
 var config struct {
@@ -39,9 +42,17 @@ func int2ip(nn uint32) net.IP {
 }
 
 type FlowKey struct {
-	Daddr uint32
-	Dport uint16
+	Ifindex uint32
+	Saddr   uint32
+	Daddr   uint32
+	Sport   uint16
+	Dport   uint16
+	Proto   uint8
 }
+
+var (
+	tmp = 0 // TODO(slankdev)
+)
 
 func (k FlowKey) String() string {
 	ipaddr := int2ip(k.Daddr)
@@ -52,7 +63,49 @@ type FlowVal struct {
 	Cnt uint32
 }
 
+type Flow struct {
+	Key FlowKey
+	Val FlowVal
+}
+
+func (f Flow) ToBuffer(buf *bytes.Buffer) error {
+	msg := exporter.IPFixMessage{
+		Header: exporter.IPFixHeader{
+			VersionNumber:  10,
+			SysupTime:      0x00002250,
+			SequenceNumber: uint32(tmp),
+			SourceID:       100,
+		},
+		FlowSets: []exporter.IPFixFlowSet{
+			{
+				FlowSetID: 1033,
+				Flow: []exporter.IPFixFlow{
+					{
+						SourceIPv4Address:        util.BS32(f.Key.Saddr),
+						DestinationIPv4Address:   util.BS32(f.Key.Daddr),
+						SourceTransportPort:      f.Key.Sport,
+						DestinationTransportPort: f.Key.Dport,
+						// SourceTransportPort:      util.BS16((f.Key.Sport)),
+						// DestinationTransportPort: util.BS16((f.Key.Dport)),
+						ProtocolIdentifier: f.Key.Proto,
+					},
+				},
+			},
+		},
+	}
+
+	if err := msg.ToBuffer(buf); err != nil {
+		return err
+	}
+	return nil
+}
+
 func fn(cmd *cobra.Command, args []string) error {
+	if err := exporter.Do("./config.yaml"); err != nil {
+		return err
+	}
+	tmp = 1
+
 	for id := ebpf.MapID(0); ; {
 		var err error
 		id, err = ebpf.MapGetNextID(ebpf.MapID(id))
@@ -76,22 +129,37 @@ func fn(cmd *cobra.Command, args []string) error {
 		vals := []FlowVal{}
 		entries := m.Iterate()
 		for entries.Next(&key, &vals) {
-			sum := uint32(0)
+			subval := FlowVal{0}
 			for _, val := range vals {
-				sum += val.Cnt
+				subval.Cnt += val.Cnt
 			}
-			fmt.Printf("%s -> %d\n", key.String(), sum)
+			fmt.Printf("%s -> %d\n", key.String(), subval.Cnt)
 
-			// UPDATE
-			if err := m.Update(key, []FlowVal{{Cnt: 0}}, ebpf.UpdateExist); err != nil {
+			f := Flow{
+				Key: key,
+				Val: subval,
+			}
+
+			addr := exporter.GetCollectorAddr()
+			buf := &bytes.Buffer{}
+			if err := f.ToBuffer(buf); err != nil {
 				return err
 			}
-			fmt.Printf("updated\n")
+			if err := exporter.UdpTransmit(addr, buf); err != nil {
+				return err
+			}
+			tmp++
+
+			// DELETE
+			if err := m.Delete(key); err != nil {
+				return err
+			}
 		}
 		if err := entries.Err(); err != nil {
 			panic(err)
 		}
 	}
+
 	println("bye...")
 	return nil
 }

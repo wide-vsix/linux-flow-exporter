@@ -19,6 +19,7 @@ limitations under the License.
 package exporter
 
 import (
+	"bytes"
 	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
@@ -47,4 +48,12 @@ func (cfg *ExporterConfig) Read(filename string) error {
 		return err
 	}
 	return nil
+}
+
+func GetCollectorAddr() string {
+	return config.Collectors[0].Address
+}
+
+func UdpTransmit(addr string, buf *bytes.Buffer) error {
+	return udptransmit(addr, buf)
 }

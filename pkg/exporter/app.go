@@ -23,6 +23,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -97,8 +99,8 @@ func NewCommand() *cobra.Command {
 	return cmd
 }
 
-func appMain(cmd *cobra.Command, args []string) error {
-	if err := config.Read(cliOpt.configfile); err != nil {
+func Do(configfile string) error {
+	if err := config.Read(configfile); err != nil {
 		return err
 	}
 
@@ -121,8 +123,25 @@ func appMain(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func appMain(cmd *cobra.Command, args []string) error {
+	return Do(cliOpt.configfile)
+}
+
 func udptransmit(dst string, buf *bytes.Buffer) error {
-	conn, err := net.Dial("udp", dst)
+	laddr, err := net.ResolveUDPAddr("udp", "0.0.0.0:50000")
+	if err != nil {
+		return err
+	}
+
+	words := strings.Split(dst, ":")
+	port, err := strconv.Atoi(words[1])
+	if err != nil {
+		return err
+	}
+
+	raddr := net.UDPAddr{IP: net.ParseIP(words[0]), Port: int(port)}
+
+	conn, err := net.DialUDP("udp", laddr, &raddr)
 	if err != nil {
 		return err
 	}
@@ -145,7 +164,7 @@ func (m *IPFixMessage) ToBuffer(buf *bytes.Buffer) error {
 			if err != nil {
 				return err
 			}
-			cnt += l + 4
+			cnt += l // + 4 + 4
 		}
 	}
 

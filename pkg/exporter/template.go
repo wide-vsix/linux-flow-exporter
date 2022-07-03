@@ -76,13 +76,13 @@ func generateIPFixTemplate() ([]IPFixMessage, error) {
 	}
 	core.templates = flowsets
 
-	flowsets = append(flowsets, dummyFlowSetData())
+	// flowsets = append(flowsets, dummyFlowSetData())
 	msg := IPFixMessage{
 		Header: IPFixHeader{
 			VersionNumber:  10,
 			SysupTime:      0x00002250,
 			SequenceNumber: 1,
-			SourceID:       0,
+			SourceID:       100,
 		},
 		FlowSets: flowsets,
 	}

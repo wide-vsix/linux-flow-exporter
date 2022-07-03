@@ -27,12 +27,24 @@ stats = {}
 for data in execute("sudo bpftool map dump name flow_stats"):
     def countup(element):
         daddr = element['key']['daddr']
+        saddr = element['key']['saddr']
         daddr = str(ipaddress.IPv4Address(socket.htonl(daddr)))
-        key = "{}:{}".format(daddr, element['key']['dport'])
-        cnt = stats.get(key, 0)
+        saddr = str(ipaddress.IPv4Address(socket.htonl(saddr)))
+        key = "{}/{}/{}:{}->{}:{}".format(
+            element['key']['ifindex'],
+            element['key']['proto'],
+            saddr, element['key']['sport'],
+            daddr, element['key']['dport'])
+        val = stats.get(key, {})
+        cnt = val.get("cnt", 0)
+        data_bytes = val.get("data_bytes", 0)
         for value in element['values']:
             cnt += value['value']['cnt']
-        stats[key] = cnt
+            data_bytes += value['value']['data_bytes']
+        val["cnt"] = cnt
+        val["data_bytes"] = data_bytes
+        stats[key] = val
+
     if "elements" in data:
         for element in data['elements']:
             countup(element)

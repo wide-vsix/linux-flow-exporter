@@ -16,6 +16,7 @@
 
 #define IP_MF     0x2000
 #define IP_OFFSET 0x1FFF
+#define INTERFACE_MAX_FLOW_LIMIT 6
 
 #define assert_len(interest, end)                 \
   ({                                              \
@@ -30,45 +31,62 @@
   })
 
 struct flowkey {
-  // uint32_t ifindex;
+  uint32_t ifindex;
+  uint32_t saddr;
   uint32_t daddr;
+  uint16_t sport;
   uint16_t dport;
+  uint8_t proto;
 }  __attribute__ ((packed));
 
 struct flowval {
   uint32_t cnt;
+  uint32_t data_bytes;
+  uint64_t flow_start_msec;
+  uint64_t flow_end_msec;
+  uint8_t finished;
 }  __attribute__ ((packed));
 
 struct {
   __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-  __uint(max_entries, 100);
+  __uint(max_entries, INTERFACE_MAX_FLOW_LIMIT);
   __type(key, struct flowkey);
   __type(value, struct flowval);
 } flow_stats SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-  __uint(key_size, sizeof(int));
-  __uint(value_size, sizeof(int));
-} flow_events SEC(".maps");
 
 static inline void record(const struct tcphdr *th, const struct iphdr *ih,
                           struct __sk_buff *skb)
 {
   uint16_t dport = th->dest;
+  uint16_t sport = th->source;
   uint32_t daddr = ih->daddr;
-  struct flowval initval = {1};
+  uint32_t saddr = ih->saddr;
+  uint8_t proto = ih->protocol;
+  uint8_t finished = 0;
   struct flowkey key = {0};
+  key.ifindex = skb->ingress_ifindex;
   key.daddr = daddr;
+  key.saddr = saddr;
   key.dport = htons(dport);
-  uint32_t *val = bpf_map_lookup_elem(&flow_stats, &key);
-  if (val)
-    *val = *val + 1;
-  else
-    bpf_map_update_elem(&flow_stats, &key, &initval, BPF_ANY);
+  key.sport = htons(sport);
+  key.proto = proto;
+  if (th->fin == 1)
+    finished = 1;
 
-  int msg = 0xefbeadde;
-  bpf_perf_event_output(skb, &flow_events, BPF_F_CURRENT_CPU, &msg, sizeof(msg));
+  struct flowval *val = bpf_map_lookup_elem(&flow_stats, &key);
+  if (val) {
+    val->cnt = val->cnt + 1;
+    val->data_bytes = val->data_bytes + skb->len;
+    val->flow_end_msec = bpf_ktime_get_ns();
+    val->finished = finished;
+  } else {
+    struct flowval initval = {0};
+    initval.cnt = 1;
+    initval.data_bytes = skb->len;
+    initval.flow_start_msec = bpf_ktime_get_ns();
+    initval.finished = finished;
+    bpf_map_update_elem(&flow_stats, &key, &initval, BPF_ANY);
+  }
 }
 
 static inline int
@@ -85,9 +103,6 @@ process_ipv4_tcp(struct __sk_buff *skb)
   uint8_t hdr_len = ih->ihl * 4;
   struct tcphdr *th = (struct tcphdr *)((char *)ih + hdr_len);
   assert_len(th, data_end);
-
-  if (!(th->syn == 1 && th->ack == 0))
-    return TC_ACT_SHOT;
 
   record(th, ih, skb);
   return TC_ACT_OK;
