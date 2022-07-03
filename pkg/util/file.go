@@ -19,38 +19,18 @@ limitations under the License.
 package util
 
 import (
-	"bytes"
-	"encoding/binary"
-	"net"
+	"io/ioutil"
+
+	"gopkg.in/yaml.v2"
 )
 
-func ConvertUint32ToIP(nn uint32) net.IP {
-	ip := make(net.IP, 4)
-	binary.LittleEndian.PutUint32(ip, nn)
-	return ip
-}
-
-func ConvertIPToUint32(ip net.IP) uint32 {
-	var val uint32
-	binary.Read(bytes.NewBuffer(ip.To4()), binary.LittleEndian, &val)
-	return val
-}
-
-func UdpTransmit(local, remote string, buf *bytes.Buffer) error {
-	laddr, err := net.ResolveUDPAddr("udp", local)
+func FileUnmarshalAsYaml(in string, v interface{}) error {
+	yamlFile, err := ioutil.ReadFile(in)
 	if err != nil {
 		return err
 	}
-	raddr, err := net.ResolveUDPAddr("udp", remote)
+	err = yaml.Unmarshal(yamlFile, v)
 	if err != nil {
-		return err
-	}
-	conn, err := net.DialUDP("udp", laddr, raddr)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if _, err = conn.Write(buf.Bytes()); err != nil {
 		return err
 	}
 	return nil

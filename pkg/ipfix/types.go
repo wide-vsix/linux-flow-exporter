@@ -18,10 +18,10 @@ limitations under the License.
 
 package ipfix
 
-type Message struct {
-	Header   Header
-	FlowSets []FlowSet
-}
+import (
+	"bytes"
+	"encoding/binary"
+)
 
 type Header struct {
 	VersionNumber  uint16
@@ -30,10 +30,19 @@ type Header struct {
 	SourceID       uint32
 }
 
+type FlowDataMessage struct {
+	Header   Header
+	FlowSets []FlowSet
+}
+
 type FlowSet struct {
-	FlowSetID uint16       `yaml:"flowSetId"`
-	Template  FlowTemplate `yaml:"template,omitempty"`
-	Flow      []Flow       `yaml:"flow"`
+	FlowSetID uint16 `yaml:"flowSetId"`
+	Flow      []Flow `yaml:"flow"`
+}
+
+type TemplateMessage struct {
+	Header    Header
+	Templates []FlowTemplate
 }
 
 type FlowTemplate struct {
@@ -46,34 +55,112 @@ type FlowTemplateField struct {
 	FieldLength uint16
 }
 
-type Flow struct {
-	FlowEndMilliseconds         uint64 `yaml:"FlowEndMilliseconds"`
-	FlowStartMilliseconds       uint64 `yaml:"FlowStartMilliseconds"`
-	OctetDeltaCount             uint64 `yaml:"OctetDeltaCount"`
-	PacketDeltaCount            uint64 `yaml:"PacketDeltaCount"`
-	IpVersion                   uint8  `yaml:"IpVersion"`
-	IngressInterface            uint32 `yaml:"IngressInterface"`
-	EgressInterface             uint32 `yaml:"EgressInterface"`
-	FlowDirection               uint8  `yaml:"FlowDirection"`
-	SourceIPv4Address           uint32 `yaml:"SourceIPv4Address"`
-	DestinationIPv4Address      uint32 `yaml:"DestinationIPv4Address"`
-	SourceTransportPort         uint16 `yaml:"SourceTransportPort"`
-	DestinationTransportPort    uint16 `yaml:"DestinationTransportPort"`
-	TcpControlBits              uint8  `yaml:"TcpControlBits"`
-	ProtocolIdentifier          uint8  `yaml:"ProtocolIdentifier"`
-	IpClassOfService            uint8  `yaml:"IpClassOfService"`
-	SourceIPv4PrefixLength      uint8  `yaml:"SourceIPv4PrefixLength"`
-	DestinationIPv4PrefixLength uint8  `yaml:"DestinationIPv4PrefixLength"`
-	IpNextHopIPv4Address        uint32 `yaml:"IpNextHopIPv4Address"`
-	BgpSourceAsNumber           uint32 `yaml:"BgpSourceAsNumber"`
-	BgpDestinationAsNumber      uint32 `yaml:"BgpDestinationAsNumber"`
-	BgpNextHopIPv4Address       uint32 `yaml:"BgpNextHopIPv4Address"`
-	IcmpTypeCodeIPv4            uint16 `yaml:"IcmpTypeCodeIPv4"`
-	MinimumTTL                  uint8  `yaml:"MinimumTTL"`
-	MaximumTTL                  uint8  `yaml:"MaximumTTL"`
-	FragmentIdentification      uint32 `yaml:"FragmentIdentification"`
-	VlanId                      uint16 `yaml:"VlanId"`
-	FlowEndReason               uint8  `yaml:"FlowEndReason"`
-	Dot1qVlanId                 uint16 `yaml:"Dot1qVlanId"`
-	Dot1qCustomerVlanId         uint16 `yaml:"Dot1qCustomerVlanId"`
+func (m TemplateMessage) Write(buf *bytes.Buffer) error {
+	cnt := 16 // ipfix message header length (const)
+	for _, t := range m.Templates {
+		cnt += 8                 // ipfix flowset header length (const)
+		cnt += 4 * len(t.Fields) // ipfix field definition length
+	}
+
+	// https://www.rfc-editor.org/rfc/rfc3954.html#section-5.1
+	if err := binary.Write(buf, binary.BigEndian, &struct {
+		VersionNumber  uint16
+		Count          uint16
+		SysupTime      uint32
+		SequenceNumber uint32
+		SourceID       uint32
+	}{
+		VersionNumber:  m.Header.VersionNumber,
+		Count:          uint16(cnt),
+		SysupTime:      m.Header.SysupTime,
+		SequenceNumber: m.Header.SequenceNumber,
+		SourceID:       m.Header.SourceID,
+	}); err != nil {
+		return err
+	}
+
+	// https://www.rfc-editor.org/rfc/rfc3954.html#section-5.2
+	for _, t := range m.Templates {
+		const flowsetHdrLen = 8
+		flowsetlen := len(t.Fields)*4 + flowsetHdrLen
+
+		if err := binary.Write(buf, binary.BigEndian, &struct {
+			FlowSetID  uint16
+			Length     uint16
+			TemplateID uint16
+			FieldCount uint16
+		}{
+			2, // TODO(slankdev): 2 is FLOW-TEMPLATE
+			uint16(flowsetlen),
+			t.TemplateID,
+			uint16(len(t.Fields)),
+		}); err != nil {
+			return err
+		}
+		for _, field := range t.Fields {
+			if err := binary.Write(buf, binary.BigEndian, &field); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (m FlowDataMessage) Write(buf *bytes.Buffer, config *Config) error {
+	cnt := 16 // ipfix message header length (const)
+	for _, fs := range m.FlowSets {
+		cnt += 4 // ipfix flowset header length (const)
+		l, err := config.getTemplateLength(fs.FlowSetID)
+		if err != nil {
+			return err
+		}
+		cnt += l * len(fs.Flow)
+	}
+
+	// https://www.rfc-editor.org/rfc/rfc3954.html#section-5.1
+	if err := binary.Write(buf, binary.BigEndian, &struct {
+		VersionNumber  uint16
+		Count          uint16
+		SysupTime      uint32
+		SequenceNumber uint32
+		SourceID       uint32
+	}{
+		VersionNumber:  m.Header.VersionNumber,
+		Count:          uint16(cnt),
+		SysupTime:      m.Header.SysupTime,
+		SequenceNumber: m.Header.SequenceNumber,
+		SourceID:       m.Header.SourceID,
+	}); err != nil {
+		return err
+	}
+
+	for _, fs := range m.FlowSets {
+		flowSetLen, err := config.getTemplateLength(fs.FlowSetID)
+		if err != nil {
+			return err
+		}
+
+		if err := binary.Write(buf, binary.BigEndian, &struct {
+			FlowSetID     uint16
+			FlowSetLength uint16
+		}{
+			FlowSetID:     fs.FlowSetID,
+			FlowSetLength: uint16(len(fs.Flow)*flowSetLen + 4),
+		}); err != nil {
+			return err
+		}
+
+		for _, f := range fs.Flow {
+			ftypes, err := getTemplateFieldTypes(fs.FlowSetID, config)
+			if err != nil {
+				return err
+			}
+			for _, ftype := range ftypes {
+				if err := binaryWrite(ftype, buf, &f); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
