@@ -1,3 +1,4 @@
+maxIpfixMessageLen: 100
 collectors:
 - remoteAddress: 35.194.97.218:2055
   localAddress: 0.0.0.0:50101
@@ -7,7 +8,6 @@ templates:
   - name: SourceIPv4Address
   - name: DestinationIPv4Address
   - name: ProtocolIdentifier
-  - name: OctetDeltaCount
   - name: PacketDeltaCount
 - id: 1002
   template:
@@ -16,6 +16,4 @@ templates:
   - name: ProtocolIdentifier
   - name: SourceTransportPort
   - name: DestinationTransportPort
-  - name: IngressInterface
-  - name: OctetDeltaCount
   - name: PacketDeltaCount

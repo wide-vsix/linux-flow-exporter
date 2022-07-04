@@ -55,3 +55,9 @@ $ sudo flowctl flush --all # all caches
 ## Limitation
 
 This software works ONLY for tcp.
+
+## Utilities
+
+```
+curl -XDELETE http://$ELASTIFLOW_ES_IPADDRESS:9200/elastiflow-flow-codex-1.4-1970.01.01
+```
