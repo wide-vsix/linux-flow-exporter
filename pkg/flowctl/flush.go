@@ -65,12 +65,12 @@ func fnFlush(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		if err := ebpfmap.Delete(ebpfmap.FlowKey{
-			Ifindex: uint32(cliOptFlush.Ifindex),
-			Proto:   uint8(cliOptFlush.Proto),
-			Saddr:   util.ConvertIPToUint32(net.ParseIP(cliOptFlush.Saddr)),
-			Daddr:   util.ConvertIPToUint32(net.ParseIP(cliOptFlush.Daddr)),
-			Sport:   uint16(cliOptFlush.Sport),
-			Dport:   uint16(cliOptFlush.Dport),
+			IngressIfindex: uint32(cliOptFlush.Ifindex),
+			Proto:          uint8(cliOptFlush.Proto),
+			Saddr:          util.ConvertIPToUint32(net.ParseIP(cliOptFlush.Saddr)),
+			Daddr:          util.ConvertIPToUint32(net.ParseIP(cliOptFlush.Daddr)),
+			Sport:          uint16(cliOptFlush.Sport),
+			Dport:          uint16(cliOptFlush.Dport),
 		}); err != nil {
 			return err
 		}

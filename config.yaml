@@ -1,6 +1,31 @@
-collectors:
-- remoteAddress: 35.194.97.218:2055
-  localAddress: 0.0.0.0:50101
+maxIpfixMessageLen: 100
+timerFinishedDrainSeconds: 5
+timerForceDrainSeconds: 30
+timerTemplateFlushSeconds: 60
+
+## FUTURE PLAN??
+# flowMetering:
+#   interfaces:
+#   - name: eth1
+#     netns: ns0
+#   - name: eth2
+#     netns: ns0
+#   - name: eth3
+#     netns: ns0
+
+outputs:
+- collector:
+    remoteAddress: 35.194.97.218:2055
+    localAddress: 0.0.0.0:50101
+- collector:
+    remoteAddress: localhost:2100
+    localAddress: 0.0.0.0:50102
+    # HELPER
+    # nfcapd -w -l /tmp/netflow -t 1000 -p 2100
+    # nfdump -r /tmp/netflow/nfcapd.202207101030 -o extended
+- log:
+    file: /tmp/flow.log
+
 templates:
 - id: 1001
   template:
@@ -19,3 +44,27 @@ templates:
   - name: IngressInterface
   - name: OctetDeltaCount
   - name: PacketDeltaCount
+- id: 1004
+  template:
+  - name: SourceIPv4Address
+  - name: DestinationIPv4Address
+  - name: ProtocolIdentifier
+  - name: SourceTransportPort
+  - name: DestinationTransportPort
+  - name: IngressInterface
+  - name: OctetDeltaCount
+  - name: PacketDeltaCount
+  - name: FlowStartMilliseconds
+  - name: FlowEndMilliseconds
+- id: 1005
+  template:
+  - name: SourceIPv4Address
+  - name: DestinationIPv4Address
+  - name: ProtocolIdentifier
+  - name: SourceTransportPort
+  - name: DestinationTransportPort
+  - name: IngressInterface
+  - name: OctetDeltaCount
+  - name: PacketDeltaCount
+  - name: FlowStartNanoseconds
+  - name: FlowEndNanoseconds
