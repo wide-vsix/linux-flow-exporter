@@ -21,6 +21,7 @@ package flowctl
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/wide-vsix/linux-flow-exporter/pkg/ebpfmap"
@@ -50,7 +51,7 @@ func fnDump(cmd *cobra.Command, args []string) error {
 	table := util.NewTableWriter(os.Stdout)
 	hdr := []string{"Ifindex", "Proto", "Src", "Dst", "Pkts", "Bytes"}
 	if cliOptDump.Output == "wide" {
-		hdr = append(hdr, []string{"Start", "End"}...)
+		hdr = append(hdr, []string{"Start", "End", "Finished"}...)
 	}
 	table.SetHeader(hdr)
 
@@ -67,6 +68,7 @@ func fnDump(cmd *cobra.Command, args []string) error {
 			data = append(data, []string{
 				fmt.Sprintf("%d", flow.Val.FlowStartMilliSecond),
 				fmt.Sprintf("%d", flow.Val.FlowEndMilliSecond),
+				strconv.FormatBool(flow.Val.Finished == uint8(1)),
 			}...)
 		}
 		table.Append(data)

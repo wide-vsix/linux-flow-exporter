@@ -28,6 +28,8 @@ import (
 type Flow struct {
 	FlowEndMilliseconds         uint64 `yaml:"FlowEndMilliseconds"`
 	FlowStartMilliseconds       uint64 `yaml:"FlowStartMilliseconds"`
+	FlowEndNanoseconds          uint64 `yaml:"FlowEndNanoseconds"`
+	FlowStartNanoseconds        uint64 `yaml:"FlowStartNanoseconds"`
 	OctetDeltaCount             uint64 `yaml:"OctetDeltaCount"`
 	PacketDeltaCount            uint64 `yaml:"PacketDeltaCount"`
 	IpVersion                   uint8  `yaml:"IpVersion"`
@@ -60,6 +62,8 @@ type Flow struct {
 var ipfixfields = []fieldTableItem{
 	{"FlowEndMilliseconds", netflow.IPFIX_FIELD_flowEndMilliseconds, 8},
 	{"FlowStartMilliseconds", netflow.IPFIX_FIELD_flowStartMilliseconds, 8},
+	{"FlowEndNanoseconds", netflow.IPFIX_FIELD_flowEndNanoseconds, 8},
+	{"FlowStartNanoseconds", netflow.IPFIX_FIELD_flowStartNanoseconds, 8},
 	{"OctetDeltaCount", netflow.IPFIX_FIELD_octetDeltaCount, 8},
 	{"PacketDeltaCount", netflow.IPFIX_FIELD_packetDeltaCount, 8},
 	{"IpVersion", netflow.IPFIX_FIELD_ipVersion, 1},
@@ -97,6 +101,14 @@ func binaryWrite(fieldType uint16, buf *bytes.Buffer, flow *Flow) error {
 		}
 	case netflow.IPFIX_FIELD_flowStartMilliseconds:
 		if err := binary.Write(buf, binary.BigEndian, &flow.FlowStartMilliseconds); err != nil {
+			return err
+		}
+	case netflow.IPFIX_FIELD_flowEndNanoseconds:
+		if err := binary.Write(buf, binary.BigEndian, &flow.FlowEndNanoseconds); err != nil {
+			return err
+		}
+	case netflow.IPFIX_FIELD_flowStartNanoseconds:
+		if err := binary.Write(buf, binary.BigEndian, &flow.FlowStartNanoseconds); err != nil {
 			return err
 		}
 	case netflow.IPFIX_FIELD_octetDeltaCount:

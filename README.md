@@ -59,5 +59,6 @@ This software works ONLY for tcp.
 ## Utilities
 
 ```
+docker run --rm -td --name tmp1 nicolaka/netshoot bash
 curl -XDELETE http://$ELASTIFLOW_ES_IPADDRESS:9200/elastiflow-flow-codex-1.4-1970.01.01
 ```
