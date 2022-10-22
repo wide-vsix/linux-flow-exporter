@@ -45,6 +45,7 @@ func NewCommand() *cobra.Command {
 	cmd.AddCommand(NewCommandMeter())
 	cmd.AddCommand(NewCommandDependencyCheck())
 	cmd.AddCommand(NewCommandEbpf())
+	cmd.AddCommand(NewCommandVersion())
 	cmd.AddCommand(util.NewCmdCompletion(cmd))
 	return cmd
 }
@@ -421,4 +422,15 @@ func getTcEbpfByteCode(netns, dev string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+func NewCommandVersion() *cobra.Command {
+	cmd := &cobra.Command{
+		Use: "version",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("v0.0.0\n")
+			return nil
+		},
+	}
+	return cmd
 }
