@@ -38,3 +38,6 @@ jobs:
         asset_name: ${{ matrix.asset_name }}
         tag: branch-main:latest
         overwrite: true
+        body: |
+          slankdev
+          {{ browser_download_url }}
