@@ -22,12 +22,43 @@ import (
 	"fmt"
 )
 
+type OutputCollector struct {
+	RemoteAddress string `yaml:"remoteAddress"`
+	LocalAddress  string `yaml:"localAddress"`
+}
+
+type OutputLog struct {
+	File string `yaml:"file"`
+}
+
+type Output struct {
+	Collector *OutputCollector `yaml:"collector"`
+	Log       *OutputLog       `yaml:"log"`
+}
+
+func (o Output) Valid() bool {
+	return !(o.Collector != nil && o.Log != nil)
+}
+
 type Config struct {
+	// MaxIpfixMessageLen Indicates the maximum size of an IPFIX message. The
+	// message is divided and sent according to this value. This value is shared
+	// by all collector output instances.
 	MaxIpfixMessageLen int `yaml:"maxIpfixMessageLen"`
-	Collectors         []struct {
-		RemoteAddress string `yaml:"remoteAddress"`
-		LocalAddress  string `yaml:"localAddress"`
-	} `yaml:"collectors"`
+	// TimerTemplateFlushSeconds indicates the interval for sending IPFIX flow
+	// template periodically. This value is shared by all collector output
+	// instances.
+	TimerTemplateFlushSeconds uint `yaml:"timerTemplateFlushSeconds"`
+	// TimerFinishedDrainSecond indicates the interval to drain the finished Flow.
+	// This interval is shared by all output instances.
+	TimerFinishedDrainSeconds uint `yaml:"timerFinishedDrainSeconds"`
+	// TimerForceDrainSecond specifies the interval to force a full Cache to be
+	// drained for each Interface. This interval is shared by all output
+	// instances.
+	TimerForceDrainSeconds uint `yaml:"timerForceDrainSeconds"`
+	// Output can contain multiple destinations to which the recorded flow cache
+	// is transferred. IPFIX Collector, Filelog, etc. can be specified.
+	Outputs   []Output `yaml:"outputs"`
 	Templates []struct {
 		ID       uint16 `yaml:"id"`
 		Template []struct {

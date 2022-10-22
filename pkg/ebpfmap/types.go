@@ -23,21 +23,27 @@ import (
 	"math"
 
 	"github.com/cilium/ebpf"
+	"github.com/wide-vsix/linux-flow-exporter/pkg/ipfix"
 	"github.com/wide-vsix/linux-flow-exporter/pkg/util"
 )
 
 const (
 	mapName = "flow_stats"
 	mapType = ebpf.PerCPUHash
+
+	metricsMapName = "metrics"
+	metricsMapType = ebpf.PerCPUHash
 )
 
 type FlowKey struct {
-	Ifindex uint32
-	Saddr   uint32
-	Daddr   uint32
-	Sport   uint16
-	Dport   uint16
-	Proto   uint8
+	IngressIfindex uint32
+	EgressIfindex  uint32
+	Saddr          uint32
+	Daddr          uint32
+	Sport          uint16
+	Dport          uint16
+	Proto          uint8
+	Mark           uint32
 }
 
 type FlowVal struct {
@@ -56,8 +62,9 @@ type Flow struct {
 func (k FlowKey) String() string {
 	saddr := util.ConvertUint32ToIP(k.Saddr)
 	daddr := util.ConvertUint32ToIP(k.Daddr)
-	return fmt.Sprintf("%d/%d/%s:%d/%s:%d",
-		k.Ifindex,
+	return fmt.Sprintf("%d/%d/%d/%s:%d/%s:%d",
+		k.IngressIfindex,
+		k.EgressIfindex,
 		k.Proto,
 		saddr.String(),
 		k.Sport,
@@ -101,12 +108,56 @@ func GetMapIDsByNameType(mapName string, mapType ebpf.MapType) ([]ebpf.MapID, er
 		if err != nil {
 			return nil, err
 		}
+		if err := m.Close(); err != nil {
+			return nil, err
+		}
+
 		if info.Name != mapName || info.Type != mapType {
 			continue
 		}
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+type StatsMetricsVal struct {
+	SynPkts       uint32 `json:"syn_pkts"`
+	OverflowPkts  uint32 `json:"overflow_pkts"`
+	OverflowBytes uint32 `json:"overflow_bytes"`
+	TotalPkts     uint32 `json:"total_pkts"`
+	TotalBytes    uint32 `json:"total_bytes"`
+}
+
+func GetStats() (map[uint32]StatsMetricsVal, error) {
+	ids, err := GetMapIDsByNameType(metricsMapName, metricsMapType)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := map[uint32]StatsMetricsVal{}
+	for _, id := range ids {
+		m, err := ebpf.NewMapFromID(id)
+		if err != nil {
+			return nil, err
+		}
+
+		var key uint32
+		perCpuVals := []StatsMetricsVal{}
+		entries := m.Iterate()
+		for entries.Next(&key, &perCpuVals) {
+			val := StatsMetricsVal{}
+			for _, perCpuVal := range perCpuVals {
+				val.SynPkts += perCpuVal.SynPkts
+				val.OverflowPkts += perCpuVal.OverflowPkts
+				val.OverflowBytes += perCpuVal.OverflowBytes
+				val.TotalPkts += perCpuVal.TotalPkts
+				val.TotalBytes += perCpuVal.TotalBytes
+			}
+			ret[key] = val
+		}
+	}
+
+	return ret, nil
 }
 
 func Dump() ([]Flow, error) {
@@ -135,6 +186,9 @@ func Dump() ([]Flow, error) {
 		if err := entries.Err(); err != nil {
 			panic(err)
 		}
+		if err := m.Close(); err != nil {
+			return nil, err
+		}
 	}
 	return flows, nil
 }
@@ -150,6 +204,39 @@ func Delete(key FlowKey) error {
 			return err
 		}
 		if err := m.Delete(key); err != nil {
+			return err
+		}
+		if err := m.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func DeleteFinished() error {
+	ids, err := GetMapIDsByNameType(mapName, mapType)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		m, err := ebpf.NewMapFromID(id)
+		if err != nil {
+			return err
+		}
+		key := FlowKey{}
+		perCpuVals := []FlowVal{}
+		entries := m.Iterate()
+		for entries.Next(&key, &perCpuVals) {
+			for _, perCpuVal := range perCpuVals {
+				if perCpuVal.Finished > 0 {
+					if err := m.Delete(key); err != nil {
+						return err
+					}
+					break
+				}
+			}
+		}
+		if err := m.Close(); err != nil {
 			return err
 		}
 	}
@@ -174,6 +261,67 @@ func DeleteAll() error {
 				return err
 			}
 		}
+		if err := m.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func ToIpfixFlowFile(ebflows []Flow) (*ipfix.FlowFile, error) {
+	flows := []ipfix.Flow{}
+	for _, ebflow := range ebflows {
+		s, err := util.KtimeToRealMilli(ebflow.Val.FlowStartMilliSecond / 1000000)
+		if err != nil {
+			return nil, err
+		}
+		e, err := util.KtimeToRealMilli(ebflow.Val.FlowEndMilliSecond / 1000000)
+		if err != nil {
+			return nil, err
+		}
+
+		flows = append(flows, ipfix.Flow{
+			IpVersion:                4,
+			SourceIPv4Address:        util.BS32(ebflow.Key.Saddr),
+			DestinationIPv4Address:   util.BS32(ebflow.Key.Daddr),
+			ProtocolIdentifier:       ebflow.Key.Proto,
+			SourceTransportPort:      ebflow.Key.Sport,
+			DestinationTransportPort: ebflow.Key.Dport,
+			OctetDeltaCount:          uint64(ebflow.Val.FlowBytes),
+			PacketDeltaCount:         uint64(ebflow.Val.FlowPkts),
+			FlowStartMilliseconds:    s,
+			FlowEndMilliseconds:      e,
+		})
+	}
+
+	flowFile := &ipfix.FlowFile{
+		FlowSets: []struct {
+			TemplateID uint16       `yaml:"templateId"`
+			Flows      []ipfix.Flow `yaml:"flows"`
+		}{
+			{
+				TemplateID: uint16(1004),
+				Flows:      flows,
+			},
+		},
+	}
+	return flowFile, nil
+}
+
+func (f Flow) ToZap() []interface{} {
+	return []interface{}{
+		"src", util.ConvertUint32ToIP(f.Key.Saddr).String(),
+		"dst", util.ConvertUint32ToIP(f.Key.Daddr).String(),
+		"proto", f.Key.Proto,
+		"sport", f.Key.Sport,
+		"dport", f.Key.Dport,
+		"ingressIfindex", f.Key.IngressIfindex,
+		"egressIfindex", f.Key.EgressIfindex,
+		"pkts", f.Val.FlowPkts,
+		"bytes", f.Val.FlowBytes,
+		"action", f.Key.Mark,
+		"start", f.Val.FlowStartMilliSecond,
+		"end", f.Val.FlowEndMilliSecond,
+		"finished", f.Val.Finished,
+	}
 }

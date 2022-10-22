@@ -21,6 +21,7 @@ package flowctl
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/wide-vsix/linux-flow-exporter/pkg/ebpfmap"
@@ -48,18 +49,20 @@ func fnDump(cmd *cobra.Command, args []string) error {
 	}
 
 	table := util.NewTableWriter(os.Stdout)
-	hdr := []string{"Ifindex", "Proto", "Src", "Dst", "Pkts", "Bytes"}
+	hdr := []string{"Iif", "Oif", "Proto", "Src", "Dst", "Mark", "Pkts", "Bytes"}
 	if cliOptDump.Output == "wide" {
-		hdr = append(hdr, []string{"Start", "End"}...)
+		hdr = append(hdr, []string{"Start", "End", "Finished"}...)
 	}
 	table.SetHeader(hdr)
 
 	for _, flow := range flows {
 		data := []string{
-			fmt.Sprintf("%d", flow.Key.Ifindex),
+			fmt.Sprintf("%d", flow.Key.IngressIfindex),
+			fmt.Sprintf("%d", flow.Key.EgressIfindex),
 			fmt.Sprintf("%d", flow.Key.Proto),
 			fmt.Sprintf("%s:%d", util.ConvertUint32ToIP(flow.Key.Saddr), flow.Key.Sport),
 			fmt.Sprintf("%s:%d", util.ConvertUint32ToIP(flow.Key.Daddr), flow.Key.Dport),
+			fmt.Sprintf("%d", flow.Key.Mark),
 			fmt.Sprintf("%d", flow.Val.FlowPkts),
 			fmt.Sprintf("%d", flow.Val.FlowBytes),
 		}
@@ -67,6 +70,7 @@ func fnDump(cmd *cobra.Command, args []string) error {
 			data = append(data, []string{
 				fmt.Sprintf("%d", flow.Val.FlowStartMilliSecond),
 				fmt.Sprintf("%d", flow.Val.FlowEndMilliSecond),
+				strconv.FormatBool(flow.Val.Finished == uint8(1)),
 			}...)
 		}
 		table.Append(data)
