@@ -428,7 +428,7 @@ func NewCommandVersion() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("v0.0.0\n")
+			fmt.Printf("v0.0.1\n")
 			return nil
 		},
 	}
