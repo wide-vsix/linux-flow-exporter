@@ -37,6 +37,12 @@ iproute2 libbpf version (expect v0.8.0): v0.8.0 (VALID)
 
 ## Example Usage
 
+```
+docker run -it --rm --name tmp --privileged --net=host --ipc=host --pid=host -v /var/run/netns:/var/run/netns fedora:37
+dnf install -y clang iproute
+curl -Lo /usr/bin/flowctl https://github.com/wide-vsix/linux-flow-exporter/releases/download/branch-main/flowctl.linux-amd64 && chmod +x /usr/bin/flowctl
+```
+
 ```yaml
 collectors:
 - address: 10.146.0.6:2100
