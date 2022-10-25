@@ -29,7 +29,14 @@ jobs:
     - name: test
       run: go test ./... -v
     - name: build
-      run: go build -o ${{ matrix.artifact_name }} cmd/flowctl/main.go
+      run: |
+        go build -o ${{ matrix.artifact_name }} -ldflags "\
+          -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitSHA=$(git rev-parse HEAD) \
+          -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitBranch=none \
+          -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitTag=$(git describe --tags --abbrev=0) \
+          -X github.com/wide-vsix/linux-flow-exporter/pkg/util.buildDate=$(date '+%Y/%m/%d-%H:%M:%S-%Z') \
+          " cmd/flowctl/main.go
+
     - name: upload
       uses: svenstaro/upload-release-action@v2
       with:
