@@ -21,8 +21,9 @@ jobs:
 
     - name: push with branch name
       id: run_docker_push_with_branch_name
-      run: >
-        docker build -t ghcr.io/wide-vsix/linux-flow-exporter:${{ github.ref }} .
-        && docker push ghcr.io/wide-vsix/linux-flow-exporter:${{ github.ref }}
+      run: |
+        VERSION=$(echo ${{ github.ref }} | sed -e "s#refs/tags/##g")
+        docker build -t ghcr.io/wide-vsix/linux-flow-exporter:$VERSION .
+        docker push ghcr.io/wide-vsix/linux-flow-exporter:$VERSION
       env:
         BUILDKIT: 1
