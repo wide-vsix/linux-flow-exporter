@@ -16,12 +16,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <byteswap.h>
-#include <arpa/inet.h>
-#include <linux/kernel.h>
 #include <linux/if_ether.h>
 #include <linux/in.h>
 #include <linux/ip.h>
@@ -32,6 +26,13 @@ limitations under the License.
 #include <linux/pkt_cls.h>
 #include <bpf/bpf_helpers.h>
 
+typedef unsigned long uint64_t;
+typedef unsigned int uint32_t;
+typedef unsigned short uint16_t;
+typedef unsigned char uint8_t;
+#define bs16(v) \
+    ((((uint16_t)(v) & (0x00ff)) << 8) | \
+     (((uint16_t)(v) & (0xff00)) >> 8))
 #define IP_MF     0x2000
 #define IP_OFFSET 0x1FFF
 #ifndef INTERFACE_MAX_FLOW_LIMIT
@@ -63,8 +64,8 @@ struct flowkey {
 }  __attribute__ ((packed));
 
 struct flowval {
-  uint32_t cnt;
-  uint32_t data_bytes;
+  uint32_t cnt; // pkts;
+  uint32_t data_bytes; // bytes;
   uint64_t flow_start_msec;
   uint64_t flow_end_msec;
   uint8_t finished;
@@ -110,7 +111,7 @@ static inline void metrics_count_syn(uint32_t ifindex)
     }
 }
 
-static inline void metrics_count_final(struct __sk_buff *skb, bool overflow)
+static inline void metrics_count_final(struct __sk_buff *skb, uint8_t overflow)
 {
   uint32_t ingress_ifindex = skb->ingress_ifindex;
   struct metricsval *mv = bpf_map_lookup_elem(&metrics, &ingress_ifindex);
@@ -148,14 +149,14 @@ static inline void record(const struct tcphdr *th, const struct iphdr *ih,
   key.egress_ifindex = skb->ifindex;
   key.daddr = daddr;
   key.saddr = saddr;
-  key.dport = htons(dport);
-  key.sport = htons(sport);
+  key.dport = bs16(dport);
+  key.sport = bs16(sport);
   key.proto = proto;
   key.mark = mark;
   if (th->fin > 0 || th->rst > 0)
     finished = 1;
 
-  bool overflow = false;
+  uint8_t overflow = 0;
   struct flowval *val = bpf_map_lookup_elem(&flow_stats, &key);
   if (val) {
     val->cnt = val->cnt + 1;
@@ -173,7 +174,7 @@ static inline void record(const struct tcphdr *th, const struct iphdr *ih,
     if (ret != 0) {
       uint32_t msg = skb->ingress_ifindex;
       bpf_perf_event_output(skb, &events, BPF_F_CURRENT_CPU, &msg, sizeof(msg));
-      overflow = true;
+      overflow = 1;
     }
   }
 
@@ -250,7 +251,7 @@ process_ethernet(struct __sk_buff *skb)
   assert_len(eth_hdr, data_end);
   pkt_len = data_end - data;
 
-  switch (htons(eth_hdr->h_proto)) {
+  switch (bs16(eth_hdr->h_proto)) {
   case 0x0800:
     return process_ipv4(skb);
   default:
