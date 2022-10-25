@@ -23,7 +23,12 @@ jobs:
       id: run_docker_push_with_branch_name
       run: |
         VERSION=$(echo ${{ github.ref }} | sed -e "s#refs/tags/##g")
-        docker build -t ghcr.io/wide-vsix/linux-flow-exporter:$VERSION .
+        docker build \
+          --build-arg GIT_SHA=$(git rev-parse HEAD) \
+          --build-arg GIT_BRANCH=nona \
+          --build-arg GIT_TAG=$VERSION \
+          --build-arg BUILD_DATE=$(date '+%Y/%m/%d-%H:%M:%S-%Z') \
+          --tag ghcr.io/wide-vsix/linux-flow-exporter:$VERSION .
         docker push ghcr.io/wide-vsix/linux-flow-exporter:$VERSION
       env:
         BUILDKIT: 1

@@ -20,9 +20,18 @@ RUN cd iproute2-${IPROUTE2_VERSION} && ./configure --libbpf_force=on --libbpf_di
 
 # STAGE(flowctl-dist)
 FROM golang:1.17 as flowctl-dist
+ARG GIT_SHA=unknown
+ARG GIT_BRANCH=unknown
+ARG GIT_TAG=unknown
+ARG BUILD_DATE=unknown
 WORKDIR /opt
 COPY ./ ./
-RUN CGO_ENABLED=0 go build -o ./bin/flowctl ./cmd/flowctl/main.go
+RUN CGO_ENABLED=0 go build -o ./bin/flowctl -ldflags "\
+  -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitSHA=$GIT_SHA \
+  -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitBranch=$GIT_BRANCH \
+  -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitTag=none \
+  -X github.com/wide-vsix/linux-flow-exporter/pkg/util.buildDate=$BUILD_DATE \
+  " ./cmd/flowctl/main.go
 
 # STAGE(rootfs)
 FROM ${UBUNTU_IMAGE} as rootfs
