@@ -1,0 +1,29 @@
+name: branch container-image
+
+on:
+  push:
+    branches: 
+    - main
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: clone repo
+      uses: actions/checkout@v2
+
+    - name: login ghcr
+      id: login_docker
+      uses: docker/login-action@v1
+      with:
+        registry: ghcr.io
+        username: vsix-robot
+        password: ${{ secrets.VSIX_ROBOT }}
+
+    - name: push with branch name
+      id: run_docker_push_with_branch_name
+      run: >
+        docker build -t ghcr.io/wide-vsix/linux-flow-exporter:branch-main .
+        && docker push ghcr.io/wide-vsix/linux-flow-exporter:branch-main
+      env:
+        BUILDKIT: 1

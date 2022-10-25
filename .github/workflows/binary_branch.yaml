@@ -1,9 +1,9 @@
-name: latest origin/main
+name: branch binary
 
 on:
   push:
     branches:
-    - "main"
+    - main
 
 jobs:
   build:
