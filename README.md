@@ -63,6 +63,12 @@ sudo flowctl meter attach --netns ns0 -n eth3
 ```
 
 ### flowctl usage
+
+```shell
+docker run --rm --name tmp -it --privileged --net=host -v /usr/include/asm:/usr/include/asm -v /var/run/netns:/var/run/netns ghcr.io/wide-vsix/linux-flow-exporter:branch-master bash
+flowctl meter status
+```
+
 ```shell
 ## How to check current flow cache
 $ sudo flowctl dump
@@ -179,3 +185,13 @@ It may be updated by LINE Corporation
 
 ```
 ```
+
+## Licence
+
+The user space components are licensed under the
+[Apache License, Version 2.0](https://github.com/wide-vsix/linux-flow-exporter/blob/main/LICENSE).
+The BPF code templates are dual-licensed under the
+[General Public License](https://github.com/wide-vsix/linux-flow-exporter/blob/main/bpf/LICENSE.GPL-2.0),
+Version 2.0 (only) and the
+[2-Clause BSD License](https://github.com/wide-vsix/linux-flow-exporter/blob/main/bpf/LICENSE.BSD-2-Clause)
+(you can use the terms of either license, at your option).
