@@ -38,4 +38,5 @@ RUN echo ". <(flowctl completion bash)" >> /root/.bashrc
 
 # FINAL STAGE
 FROM scratch
+LABEL org.opencontainers.image.source https://github.com/wide-vsix/linux-flow-exporter
 COPY --from=rootfs / /
