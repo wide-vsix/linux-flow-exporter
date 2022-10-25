@@ -16,11 +16,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <byteswap.h>
-#include <arpa/inet.h>
+// #include <stdio.h>
+//#include <stdint.h>
+//#include <stdbool.h>
+//#include <byteswap.h>
+//#include <arpa/inet.h>
 #include <linux/kernel.h>
 #include <linux/if_ether.h>
 #include <linux/in.h>
@@ -38,6 +38,14 @@ limitations under the License.
 #define INTERFACE_MAX_FLOW_LIMIT 8
 #endif /* INTERFACE_MAX_FLOW_LIMIT */
 #define MAX_INTERFACES 512
+
+typedef unsigned long uint64_t;
+typedef unsigned int uint32_t;
+typedef unsigned short uint16_t;
+typedef unsigned char uint8_t;
+typedef int bool;
+#define true 1
+#define false 0
 
 #define assert_len(interest, end)                 \
   ({                                              \
