@@ -29,7 +29,7 @@ COPY ./ ./
 RUN CGO_ENABLED=0 go build -o ./bin/flowctl -ldflags "\
   -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitSHA=$GIT_SHA \
   -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitBranch=$GIT_BRANCH \
-  -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitTag=none \
+  -X github.com/wide-vsix/linux-flow-exporter/pkg/util.gitTag=$GIT_TAG \
   -X github.com/wide-vsix/linux-flow-exporter/pkg/util.buildDate=$BUILD_DATE \
   " ./cmd/flowctl/main.go
 
