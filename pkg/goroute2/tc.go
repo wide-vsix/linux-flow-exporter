@@ -110,3 +110,21 @@ func ClsActIsEnabled(netns, dev string) (bool, error) {
 	}
 	return false, nil
 }
+
+func EnsureClsactEnabled(netns, dev string) error {
+	clsActIsEnabled, err := ClsActIsEnabled(netns, dev)
+	if err != nil {
+		return err
+	}
+	if !clsActIsEnabled {
+		netnsPreCmd := ""
+		if netns != "" {
+			netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
+		}
+		if _, err := util.LocalExecutef("%s tc qdisc add dev %s clsact",
+			netnsPreCmd, dev); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -52,7 +52,6 @@ func NewCommandIpfix() *cobra.Command {
 	}
 	cmd.AddCommand(NewCommandIpfixTemplate())
 	cmd.AddCommand(NewCommandIpfixDump())
-	cmd.AddCommand(NewCommandIpfixAgent())
 	return cmd
 }
 
@@ -211,19 +210,9 @@ func fnIpfixDump(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func NewCommandIpfixAgent() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:  "agent",
-		RunE: fnIpfixAgent,
-	}
-	cmd.Flags().StringVarP(&cliOptIpfix.Config, "config", "c", "./config.yaml",
-		"Specifiy ipfix configuration")
-	return cmd
-}
-
-func fnIpfixAgent(cmd *cobra.Command, args []string) error {
+func threadFlowExporter() error {
 	config := ipfix.Config{}
-	if err := util.FileUnmarshalAsYaml(cliOptIpfix.Config, &config); err != nil {
+	if err := util.FileUnmarshalAsYaml(cliOptAgent.Config, &config); err != nil {
 		return err
 	}
 
