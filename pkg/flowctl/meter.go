@@ -23,6 +23,9 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/wide-vsix/linux-flow-exporter/pkg/goroute2"
@@ -41,7 +44,7 @@ func NewCommandMeter() *cobra.Command {
 
 var cliOptMeter = struct {
 	Attach struct {
-		Override bool
+		Force bool
 		// Interface store the pair network namespace name and network device
 		// name. When the default network namespace, we don't need to write
 		// actual name of network namespace. These value are represented as
@@ -90,116 +93,76 @@ func NewCommandMeterAttach() *cobra.Command {
 				return err
 			}
 
-			// Ensure bpf file content
-			if err := os.MkdirAll("/var/run/flowctl", os.ModePerm); err != nil {
-				return err
-			}
-			hash := sha1.New()
-			hash.Write(filterBpfFileContent)
-			hashval := hash.Sum(nil)
-			fileprefix := fmt.Sprintf("/var/run/flowctl/%x.bpf", hashval)
-			if err := os.WriteFile(fmt.Sprintf("%s.c", fileprefix),
-				filterBpfFileContent, 0644); err != nil {
-				return err
-			}
-
-			filterBpfObjectPath := fmt.Sprintf("%s.%s.%s.%d.o", fileprefix,
-				netns, device, cliOptMeter.Attach.InterfaceMaxFlowLimit)
-
-			// Build
-			if _, err := util.LocalExecutef(
-				"clang -target bpf -O3 -g -DINTERFACE_MAX_FLOW_LIMIT=%d -c %s.c -o %s",
-				cliOptMeter.Attach.InterfaceMaxFlowLimit,
-				fileprefix, filterBpfObjectPath,
-			); err != nil {
-				return err
-			}
-
-			netnsPreCmd := ""
-			if netns != "" {
-				netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
-			}
-
 			links, err := goroute2.ListLinkMatch(netns, device)
 			if err != nil {
 				return err
 			}
 
 			for _, link := range links {
-				overriden := false
-				changed := false
-
-				// Enable cls act if it's disabled
-				clsActIsEnabled, err := goroute2.ClsActIsEnabled(netns, link.Ifname)
+				bc, err := NewFlowMeterByteCode(netns, link.Ifname,
+					uint16(cliOptMeter.Attach.InterfaceMaxFlowLimit))
 				if err != nil {
 					return err
 				}
-				if !clsActIsEnabled {
-					if !cliOptMeter.Attach.Dry {
-						if _, err := util.LocalExecutef("%s tc qdisc add dev %s clsact",
-							netnsPreCmd, link.Ifname); err != nil {
+
+				// Enable cls act if it's disabled
+				if err := goroute2.EnsureClsactEnabled(netns, link.Ifname); err != nil {
+					return err
+				}
+
+				attached, bpfname, err := bpfIsAttached(netns, link.Ifname,
+					cliOptMeter.Attach.Pref, cliOptMeter.Attach.Chain,
+					cliOptMeter.Attach.Handle)
+				if err != nil {
+					return err
+				}
+
+				changed := false
+				requestAttach := false
+
+				if attached {
+					same, err := bc.SameDigest(bpfname)
+					if err != nil {
+						return err
+					}
+					if same {
+						// donothing
+					} else {
+						if err := bpfDetach(netns, link.Ifname, cliOptMeter.Attach.Pref,
+							cliOptMeter.Attach.Chain, cliOptMeter.Attach.Handle,
+							cliOptMeter.Attach.Dry); err != nil {
 							return err
 						}
+						changed = true
+						requestAttach = true
+					}
+				} else {
+					requestAttach = true
+				}
+
+				if requestAttach {
+					if err := bpfAttach(netns, link.Ifname, cliOptMeter.Attach.Pref,
+						cliOptMeter.Attach.Chain, cliOptMeter.Attach.Handle, bc,
+						cliOptMeter.Attach.Section, cliOptMeter.Attach.Dry); err != nil {
+						return err
 					}
 					changed = true
 				}
 
-				// Delete existing rule
-				if cliOptMeter.Attach.Override {
-					rules, err := goroute2.ListTcFilterRules(netns, link.Ifname)
-					if err != nil {
-						return err
-					}
-					for _, rule := range rules {
-						if rule.Pref == cliOptMeter.Attach.Pref &&
-							rule.Chain == cliOptMeter.Attach.Chain &&
-							rule.Options.Handle == fmt.Sprintf("0x%x", cliOptMeter.Attach.Handle) {
-
-							if !cliOptMeter.Attach.Dry {
-								if _, err := util.LocalExecutef("%s tc filter del dev %s egress "+
-									"pref %d chain %d handle 0x%x bpf", netnsPreCmd, link.Ifname,
-									cliOptMeter.Attach.Pref, cliOptMeter.Attach.Chain,
-									cliOptMeter.Attach.Handle,
-								); err != nil {
-									return err
-								}
-							}
-							changed = true
-							overriden = true
-						}
-					}
+				changedStr := " (unchanged)"
+				if changed {
+					changedStr = " (changed)"
 				}
-
-				if !cliOptMeter.Attach.Dry {
-					// Install rule
-					//
-					// [EXAMPLE]
-					// tc filter add dev eth1 egress \
-					//   pref 100 chain 10 handle 0xA \
-					//   bpf obj ./cmd/ebpflow/filter.bpf.o section tc-egress
-					if _, err := util.LocalExecutef("%s tc filter add dev %s egress "+
-						"pref %d chain %d handle 0x%x "+
-						"bpf obj %s section %s", netnsPreCmd, link.Ifname,
-						cliOptMeter.Attach.Pref, cliOptMeter.Attach.Chain,
-						cliOptMeter.Attach.Handle,
-						filterBpfObjectPath,
-						cliOptMeter.Attach.Section,
-					); err != nil {
-						return err
-					}
-				}
-				changed = true
-
-				fmt.Printf("%s:%s (changed=%v, overriden=%v)\n", netns, link.Ifname,
-					changed, overriden)
+				fmt.Printf("%s:%s%s\n", netns, link.Ifname, changedStr)
 			}
 
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&cliOptMeter.Attach.Dry, "dry", false, "Dry run mode")
-	cmd.Flags().BoolVarP(&cliOptMeter.Attach.Override, "override", "o", true,
-		"Override current ebpf bytecode")
+	cmd.Flags().BoolVarP(&cliOptMeter.Attach.Force, "force", "f", false,
+		"Force current ebpf bytecode when the byte code is different."+
+			"It's not replace when the byte code is not different")
 	cmd.Flags().StringVarP(&cliOptMeter.Attach.Interface, "interface", "i", "",
 		"Target network namespace and device name (NETNS:DEV or DEV)")
 	cmd.Flags().StringVar(&cliOptMeter.Attach.Section, "section",
@@ -264,7 +227,11 @@ func NewCommandMeterDetach() *cobra.Command {
 				if tmp == "" {
 					tmp = "DEFAULT"
 				}
-				fmt.Printf("%s:%s (changed=%v)\n", tmp, link.Ifname, changed)
+				changedStr := " (unchanged)"
+				if changed {
+					changedStr = " (changed)"
+				}
+				fmt.Printf("%s:%s%s\n", tmp, link.Ifname, changedStr)
 			}
 
 			return nil
@@ -306,7 +273,7 @@ func NewCommandMeterStatus() *cobra.Command {
 						if name == "" {
 							name = "<n/a>"
 						}
-						fmt.Printf("%s.%s: %s\n", netns, link.Ifname, name)
+						fmt.Printf("%s:%s = %s\n", netns, link.Ifname, name)
 					}
 				}
 			}
@@ -325,7 +292,7 @@ func NewCommandMeterStatus() *cobra.Command {
 					if name == "" {
 						name = "<n/a>"
 					}
-					fmt.Printf("DEFAULT.%s: %s\n", link.Ifname, name)
+					fmt.Printf("DEFAULT:%s = %s\n", link.Ifname, name)
 				}
 			}
 
@@ -333,4 +300,171 @@ func NewCommandMeterStatus() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+const (
+	meterDir = "/var/run/flowctl"
+)
+
+type FlowMeterByteCode struct {
+	// AttachedTime indicates when the tc filter was created.
+	AttachedTime time.Time
+	// Digest is a Hash of Code. It is used to determine if the Bytecode
+	// currently in use needs to be changed.
+	// Code contains the source code of the BPF program. This is useful
+	// to check the differences between versions, since the table entry
+	// size is not embedded.
+	Digest string
+	// NetnsName indicates network namespace name like ns0, ns1, etc...
+	// It's not include device information.
+	// Currently we are expecting the name is not include special characters,
+	// like .,:/-?
+	NetnsName string
+	// DeviceName indicates network interface name like eth0, eth1, etc...
+	// It's not include namespace information
+	// It is possible to include special characters like .-@
+	DeviceName string
+	// InterfaceMaxFlowLimit will be mapped on follow
+	// #define INTERFACE_MAX_FLOW_LIMIT 6
+	InterfaceMaxFlowLimit uint16
+}
+
+func NewFlowMeterByteCode(netns, device string, lim uint16) (*FlowMeterByteCode, error) {
+	if err := os.MkdirAll(meterDir, os.ModePerm); err != nil {
+		return nil, err
+	}
+
+	if netns == "" {
+		netns = "DEFAULT"
+	}
+
+	hash := sha1.New()
+	hash.Write(filterBpfFileContent)
+	hashval := hash.Sum(nil)
+	hashstr := fmt.Sprintf("%x", hashval)
+
+	bc := &FlowMeterByteCode{
+		AttachedTime:          time.Now(),
+		Digest:                hashstr,
+		NetnsName:             netns,
+		DeviceName:            device,
+		InterfaceMaxFlowLimit: lim,
+	}
+
+	obj := bc.EncodeToFilename()
+	src := fmt.Sprintf("%s/scode.%s.bpf.c", meterDir, hashstr)
+	if err := os.WriteFile(src, filterBpfFileContent, 0644); err != nil {
+		return nil, err
+	}
+
+	// Build
+	if _, err := util.LocalExecutef(
+		"clang -target bpf -O3 -g -DINTERFACE_MAX_FLOW_LIMIT=%d -c %s -o %s",
+		lim, src, obj); err != nil {
+		return nil, err
+	}
+
+	return bc, nil
+}
+
+func (v FlowMeterByteCode) EncodeToFilename() string {
+	// /var/run/flowctl/{timestamp}.{digest}.{netns}.{device}.{limit}.bpf.o
+	return fmt.Sprintf("%s/bcode.%016x.%s.%s.%s.%04x.bpf.o", meterDir,
+		v.AttachedTime.Unix(), v.Digest, v.NetnsName, v.DeviceName,
+		v.InterfaceMaxFlowLimit)
+}
+
+func DecodeFromBpfName(bpfname string) (*FlowMeterByteCode, error) {
+	words := strings.Split(bpfname, ":")
+	if len(words) != 2 {
+		return nil, fmt.Errorf("SameDigest: invalid format (%s)", bpfname)
+	}
+	fullpath := fmt.Sprintf("%s/%s", meterDir, words[0])
+	bc, err := DecodeFromFullpath(fullpath)
+	if err != nil {
+		return nil, err
+	}
+	return bc, nil
+}
+
+func DecodeFromFullpath(s string) (*FlowMeterByteCode, error) {
+	v := &FlowMeterByteCode{}
+	words0 := strings.Split(s, "/")
+	if len(words0) != 5 {
+		return nil, fmt.Errorf("DecodeFromFullpath: invalid format (%s) line1", s)
+	}
+	words := strings.Split(words0[4], ".")
+	if len(words) != 8 {
+		return nil, fmt.Errorf("DecodeFromFullpath: invalid format (%s) line2", s)
+	}
+	tsval, err := strconv.ParseInt(words[1], 16, 64)
+	if err != nil {
+		return nil, err
+	}
+	limitval, err := strconv.ParseUint(words[5], 16, 16)
+	if err != nil {
+		return nil, err
+	}
+	v.AttachedTime = time.Unix(tsval, 0)
+	v.Digest = words[2]
+	v.NetnsName = words[3]
+	v.DeviceName = words[4]
+	v.InterfaceMaxFlowLimit = uint16(limitval)
+	return v, nil
+}
+
+func (v FlowMeterByteCode) SameDigest(bpfname string) (bool, error) {
+	// e3cf4890517434e09918631b6ffca82d7002fa45.bpf.ns0.eth1.6.o:[tc-egress]
+	bc, err := DecodeFromBpfName(bpfname)
+	if err != nil {
+		return false, err
+	}
+	return bc.Digest == v.Digest, nil
+}
+
+func bpfIsAttached(netns, device string,
+	pref, chain, handle uint) (bool, string, error) {
+	rules, err := goroute2.ListTcFilterRules(netns, device)
+	if err != nil {
+		return false, "", err
+	}
+	for _, rule := range rules {
+		if rule.Pref == cliOptMeter.Attach.Pref &&
+			rule.Chain == cliOptMeter.Attach.Chain &&
+			rule.Options.Handle == fmt.Sprintf("0x%x", cliOptMeter.Attach.Handle) {
+			return true, rule.Options.BpfName, nil
+		}
+	}
+	return false, "", nil
+}
+
+func bpfDetach(netns, device string, pref, chain, handle uint, dry bool) error {
+	netnsPreCmd := ""
+	if netns != "" {
+		netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
+	}
+	if !dry {
+		if _, err := util.LocalExecutef("%s tc filter del dev %s egress "+
+			"pref %d chain %d handle 0x%x bpf",
+			netnsPreCmd, device, pref, chain, handle); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func bpfAttach(netns, device string, pref, chain, handle uint,
+	bc *FlowMeterByteCode, section string, dry bool) error {
+	netnsPreCmd := ""
+	if netns != "" {
+		netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
+	}
+	if !dry {
+		if _, err := util.LocalExecutef("%s tc filter add dev %s egress "+
+			"pref %d chain %d handle 0x%x bpf obj %s section %s", netnsPreCmd, device,
+			pref, chain, handle, bc.EncodeToFilename(), section); err != nil {
+			return err
+		}
+	}
+	return nil
 }
