@@ -71,7 +71,7 @@ var (
 	)
 )
 
-func threadExporter() {
+func threadMetricsExporter() error {
 	go func() {
 		for {
 			stats, err := ebpfmap.GetStats()
@@ -92,4 +92,5 @@ func threadExporter() {
 	}()
 	http.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(":9999", nil)
+	return nil
 }

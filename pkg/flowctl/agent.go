@@ -24,15 +24,35 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var cliOptAgent = struct {
+	Config   string
+	FlowFile string
+}{}
+
 func NewCommandAgent() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "agent",
 		Run: func(cmd *cobra.Command, args []string) {
-			go threadExporter()
+			go func() {
+				slog.Info("metrics exporter thread is started")
+				if err := threadMetricsExporter(); err != nil {
+					panic(err)
+				}
+				slog.Info("metrics exporter thread is finished")
+			}()
+			go func() {
+				slog.Info("flow exporter thread is started")
+				if err := threadFlowExporter(); err != nil {
+					panic(err)
+				}
+				slog.Info("flow exporter thread is finished")
+			}()
 			for {
 				time.Sleep(1 * time.Second)
 			}
 		},
 	}
+	cmd.Flags().StringVarP(&cliOptAgent.Config, "config", "c", "./config.yaml",
+		"Specifiy ipfix configuration")
 	return cmd
 }
