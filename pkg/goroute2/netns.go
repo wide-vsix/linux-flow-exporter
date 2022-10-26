@@ -21,6 +21,7 @@ package goroute2
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/wide-vsix/linux-flow-exporter/pkg/util"
 )
@@ -70,4 +71,19 @@ func ListLink(netns string) ([]Link, error) {
 		return nil, err
 	}
 	return links, nil
+}
+
+func ListLinkMatch(netns string, regex string) ([]Link, error) {
+	list, err := ListLink(netns)
+	if err != nil {
+		return nil, err
+	}
+	filtered := []Link{}
+	for _, item := range list {
+		re := regexp.MustCompile(regex)
+		if re.Match([]byte(item.Ifname)) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered, nil
 }
