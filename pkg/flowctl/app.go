@@ -40,10 +40,10 @@ func NewCommand() *cobra.Command {
 	cmd.AddCommand(NewCommandDump())
 	cmd.AddCommand(NewCommandFlush())
 	cmd.AddCommand(NewCommandIpfix())
-	cmd.AddCommand(NewCommandPrometheus())
 	cmd.AddCommand(NewCommandMeter())
 	cmd.AddCommand(NewCommandDependencyCheck())
 	cmd.AddCommand(NewCommandEbpf())
+	cmd.AddCommand(NewCommandAgent())
 	cmd.AddCommand(util.NewCommandVersion())
 	cmd.AddCommand(util.NewCmdCompletion(cmd))
 	return cmd

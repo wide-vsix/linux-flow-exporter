@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/wide-vsix/linux-flow-exporter/pkg/ebpfmap"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -72,40 +71,25 @@ var (
 	)
 )
 
-func NewCommandPrometheus() *cobra.Command {
-	cmd := &cobra.Command{
-		Use: "prometheus",
-	}
-	cmd.AddCommand(NewCommandPrometheusExporter())
-	return cmd
-}
-
-func NewCommandPrometheusExporter() *cobra.Command {
-	cmd := &cobra.Command{
-		Use: "exporter",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			go func() {
-				for {
-					stats, err := ebpfmap.GetStats()
-					if err != nil {
-						continue
-					}
-					for ifindex, metrics := range stats {
-						l := prometheus.Labels{
-							"ifindex": fmt.Sprintf("%d", ifindex),
-						}
-						overflowPkts.With(l).Set(float64(metrics.OverflowPkts))
-						overflowBytes.With(l).Set(float64(metrics.OverflowBytes))
-						totalPkts.With(l).Set(float64(metrics.TotalPkts))
-						totalBytes.With(l).Set(float64(metrics.TotalBytes))
-					}
-					time.Sleep(time.Second)
+func threadExporter() {
+	go func() {
+		for {
+			stats, err := ebpfmap.GetStats()
+			if err != nil {
+				continue
+			}
+			for ifindex, metrics := range stats {
+				l := prometheus.Labels{
+					"ifindex": fmt.Sprintf("%d", ifindex),
 				}
-			}()
-			http.Handle("/metrics", promhttp.Handler())
-			http.ListenAndServe(":9999", nil)
-			return nil
-		},
-	}
-	return cmd
+				overflowPkts.With(l).Set(float64(metrics.OverflowPkts))
+				overflowBytes.With(l).Set(float64(metrics.OverflowBytes))
+				totalPkts.With(l).Set(float64(metrics.TotalPkts))
+				totalBytes.With(l).Set(float64(metrics.TotalBytes))
+			}
+			time.Sleep(time.Second)
+		}
+	}()
+	http.Handle("/metrics", promhttp.Handler())
+	http.ListenAndServe(":9999", nil)
 }
