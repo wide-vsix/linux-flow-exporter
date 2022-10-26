@@ -182,6 +182,21 @@ func getTcEbpfByteCode(netns, dev string) (string, error) {
 	return "", nil
 }
 
+func getFlowMeterByteCode(netns, dev string) (*FlowMeterByteCode, error) {
+	bpfname, err := getTcEbpfByteCode(netns, dev)
+	if err != nil {
+		return nil, err
+	}
+	if bpfname == "" {
+		return nil, nil
+	}
+	bc, err := DecodeFromBpfName(bpfname)
+	if err != nil {
+		return nil, err
+	}
+	return bc, nil
+}
+
 func parseInterface(s string) (netns string, device string, err error) {
 	if s == "" {
 		return "", "", fmt.Errorf("interface is not specified")

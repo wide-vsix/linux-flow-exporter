@@ -266,14 +266,9 @@ func NewCommandMeterStatus() *cobra.Command {
 				}
 				for _, link := range links {
 					if link.Ifname != "lo" {
-						name, err := getTcEbpfByteCode(netns, link.Ifname)
-						if err != nil {
+						if err := printStatus(netns, link.Ifname); err != nil {
 							return err
 						}
-						if name == "" {
-							name = "<n/a>"
-						}
-						fmt.Printf("%s:%s = %s\n", netns, link.Ifname, name)
 					}
 				}
 			}
@@ -285,14 +280,9 @@ func NewCommandMeterStatus() *cobra.Command {
 			}
 			for _, link := range links {
 				if link.Ifname != "lo" {
-					name, err := getTcEbpfByteCode("", link.Ifname)
-					if err != nil {
+					if err := printStatus("", link.Ifname); err != nil {
 						return err
 					}
-					if name == "" {
-						name = "<n/a>"
-					}
-					fmt.Printf("DEFAULT:%s = %s\n", link.Ifname, name)
 				}
 			}
 
@@ -465,6 +455,24 @@ func bpfAttach(netns, device string, pref, chain, handle uint,
 			pref, chain, handle, bc.EncodeToFilename(), section); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func printStatus(netns, device string) error {
+	bc, err := getFlowMeterByteCode(netns, device)
+	if err != nil {
+		return err
+	}
+	if netns == "" {
+		netns = "DEFAULT"
+	}
+	if bc == nil {
+		fmt.Printf("%s:%s = <nil>\n", netns, device)
+	} else {
+		fmt.Printf("%s:%s.digest = %s\n", netns, device, bc.Digest)
+		fmt.Printf("%s:%s.limit = %d\n", netns, device, bc.InterfaceMaxFlowLimit)
+		fmt.Printf("%s:%s.attached = %s\n", netns, device, bc.AttachedTime.String())
 	}
 	return nil
 }
