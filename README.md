@@ -185,6 +185,47 @@ It may be updated by LINE Corporation
 ```
 ```
 
+## Pre Build Packages
+
+You can use
+[automated build container images](https://github.com/wide-vsix/linux-flow-exporter/pkgs/container/linux-flow-exporter/versions?filters%5Bversion_type%5D=tagged) or
+[automated build elf-binary](https://github.com/wide-vsix/linux-flow-exporter/releases).
+Both are automatically created by updating main-branch and creating release.
+Please note that flowctl depends on clang, iproute2 and linux kernel.
+You can use `flowctl dependency-check` to check for dependency problems.
+
+for container (latest version)
+```
+docker run -it --rm --privileged --net=host \
+  -v /usr/include/asm:/usr/include/asm \
+  -v /var/run/netns:/var/run/netns \
+  ghcr.io/wide-vsix/linux-flow-exporter:branch-main bash
+flowctl version
+```
+
+for container (specified version)
+```
+docker run -it --rm --privileged --net=host \
+  -v /usr/include/asm:/usr/include/asm \
+  -v /var/run/netns:/var/run/netns \
+  ghcr.io/wide-vsix/linux-flow-exporter:v0.0.5 bash
+flowctl version
+```
+
+for binary (latest version)
+```
+curl -Lo /usr/local/bin/flowctl https://github.com/wide-vsix/linux-flow-exporter/releases/download/branch-main/flowctl.linux-amd64
+chmod +x /usr/local/bin/flowctl
+flowctl version
+```
+
+for binary (specified version)
+```
+curl -Lo /usr/local/bin/flowctl https://github.com/wide-vsix/linux-flow-exporter/releases/download/v0.0.5/flowctl.linux-amd64
+chmod +x /usr/local/bin/flowctl
+flowctl version
+```
+
 ## Licence
 
 The user space components are licensed under the
