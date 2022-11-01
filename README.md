@@ -187,6 +187,11 @@ It may be updated by LINE Corporation
 
 ## Pre Build Packages
 
+![](https://github.com/wide-vsix/linux-flow-exporter/actions/workflows/binary_branch.yaml/badge.svg)<br/>
+![](https://github.com/wide-vsix/linux-flow-exporter/actions/workflows/binary_release.yaml/badge.svg)<br/>
+![](https://github.com/wide-vsix/linux-flow-exporter/actions/workflows/image_branch.yaml/badge.svg)<br/>
+![](https://github.com/wide-vsix/linux-flow-exporter/actions/workflows/image_release.yaml/badge.svg)<br/>
+
 You can use
 [automated build container images](https://github.com/wide-vsix/linux-flow-exporter/pkgs/container/linux-flow-exporter/versions?filters%5Bversion_type%5D=tagged) or
 [automated build elf-binary](https://github.com/wide-vsix/linux-flow-exporter/releases).
