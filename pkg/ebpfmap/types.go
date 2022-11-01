@@ -51,7 +51,7 @@ type FlowVal struct {
 	FlowBytes            uint32 `json:"data_bytes"`
 	FlowStartMilliSecond uint64 `json:"flow_start_msec"`
 	FlowEndMilliSecond   uint64 `json:"flow_end_msec"`
-	Finished             uint8
+	Finished             uint8  `json:"finished"`
 }
 
 type Flow struct {
