@@ -184,7 +184,7 @@ func Dump() ([]Flow, error) {
 			flows = append(flows, Flow{key, val})
 		}
 		if err := entries.Err(); err != nil {
-			panic(err)
+			return nil, err
 		}
 		if err := m.Close(); err != nil {
 			return nil, err
