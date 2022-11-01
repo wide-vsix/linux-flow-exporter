@@ -194,7 +194,7 @@ func fnIpfixDump(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("invalid config")
 			}
 			if o.Log != nil {
-				if err := FlowOutputLog(ebpfFlows, o.Log.File); err != nil {
+				if err := FlowOutputLog(ebpfFlows, o.Log.File, *o.Log); err != nil {
 					return err
 				}
 			}
@@ -345,7 +345,7 @@ func flushCachesFinished(config ipfix.Config) error {
 			return fmt.Errorf("invalid config")
 		}
 		if o.Log != nil {
-			if err := FlowOutputLog(ebpfFlows, o.Log.File); err != nil {
+			if err := FlowOutputLog(ebpfFlows, o.Log.File, *o.Log); err != nil {
 				return err
 			}
 		}
@@ -385,7 +385,7 @@ func flushCaches(config ipfix.Config) error {
 			return fmt.Errorf("invalid config")
 		}
 		if o.Log != nil {
-			if err := FlowOutputLog(ebpfFlows, o.Log.File); err != nil {
+			if err := FlowOutputLog(ebpfFlows, o.Log.File, *o.Log); err != nil {
 				return err
 			}
 		}
@@ -415,7 +415,7 @@ func flushCaches(config ipfix.Config) error {
 	return nil
 }
 
-func FlowOutputLog(flows []ebpfmap.Flow, out string) error {
+func FlowOutputLog(flows []ebpfmap.Flow, out string, o ipfix.OutputLog) error {
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
 		out,
@@ -427,7 +427,11 @@ func FlowOutputLog(flows []ebpfmap.Flow, out string) error {
 	log := zapr.NewLogger(zapLog)
 
 	for _, flow := range flows {
-		log.Info("flowlog", flow.ToZap()...)
+		args, err := flow.ToZap(o)
+		if err != nil {
+			return err
+		}
+		log.Info("flowlog", args...)
 	}
 	return nil
 }

@@ -25,7 +25,22 @@ outputs:
     # nfdump -r /tmp/netflow/nfcapd.202207101030 -o extended
 - log:
     file: /tmp/flow.log
-
+    # hooks:
+    # - name: hostname addition
+    #   command: /usr/bin/hook_command_example_hostname.sh
+    # - name: shell to resolve hostname
+    #   shell: |
+    #     #!/bin/sh
+    #     echo `cat` | jq --arg hostname $(hostname) '. + {hostname: $hostname}'
+    # - name: shell to resolve ifname from ifindex
+    #   shell: |
+    #     #!/bin/sh
+    #     IN=$(cat)
+    #     I_IDX=$(echo $IN | jq .ingressIfindex -r)
+    #     E_IDX=$(echo $IN | jq .egressIfindex -r )
+    #     I_NAME=$(ip -n ns0 -j link | jq --argjson idx $I_IDX '.[] | select(.ifindex == $idx) | .ifname' -r)
+    #     E_NAME=$(ip -n ns0 -j link | jq --argjson idx $E_IDX '.[] | select(.ifindex == $idx) | .ifname' -r)
+    #     echo $IN | jq --arg i_name $I_NAME --arg e_name $E_NAME '. + {ingressIfname: $i_name, egressIfname: $e_name}'
 templates:
 - id: 1001
   template:

@@ -20,6 +20,8 @@ package ipfix
 
 import (
 	"fmt"
+
+	"github.com/wide-vsix/linux-flow-exporter/pkg/hook"
 )
 
 type OutputCollector struct {
@@ -27,8 +29,79 @@ type OutputCollector struct {
 	LocalAddress  string `yaml:"localAddress"`
 }
 
+// Hook can speficy external mechianism to make log-data updated Only one of the
+// other Hook backends will be enabled.
+//
+// DEVELOPER_NOTE(slankdev):
+// To add a new hook backend, follow hook.Command, hook.Shell in /pkg/hook. If
+// you add hook.Foo to type Hook struct, please edit Hook.Valid() function and
+// Hook.Execute() function at the same time.
+//
+// TODO(slankdev):
+// performance Currently, an external program is executed for a single log data,
+// but this is inefficient for a large number of log data, so batch processing
+// should be used in the future.
+type Hook struct {
+	// Name make operator to know which hook is executed or failed.
+	Name string `yaml:"name"`
+	// Command is a hook to argument data using an external program like CNI.
+	// It sends log data via standard input to the command it executes. Receive
+	// modified log data on stdout. If the command fails, the log data is lost.
+	// It respects ansible.builtin.command, but may be changed in the future.
+	//
+	// ## Example
+	// ```
+	// hooks:
+	// - command:
+	//     cmd: /usr/bin/cmd1
+	// ```
+	Command *hook.Command `yaml:"command"`
+	// Shell is the backend that executes the external program. It is similar to
+	// the Command hook, but it allows you to write shell scripts directly in the
+	// config file, so you should use this one for simple operations. For example,
+	// you can use jq to add property, resolve ifname from ifindex, add hostname,
+	// and so on.
+	//
+	// ## Example ``` hooks: - name: test hook1
+	//   shell:
+	//     shell: |
+	//       #!/bin/sh
+	//       echo `cat` | jq --arg hostname $(hostname) '. + {hostname: $hostname}'
+	// ```
+	Shell *hook.Shell `yaml:"shell"`
+}
+
+func (h Hook) Valid() bool {
+	cnt := 0
+	if h.Command != nil {
+		cnt++
+	}
+	if h.Shell != nil {
+		cnt++
+	}
+	return cnt == 1
+}
+
+func (h Hook) Execute(m map[string]interface{}) (map[string]interface{}, error) {
+	if !h.Valid() {
+		return nil, fmt.Errorf("invalid hook")
+	}
+	if h.Shell != nil {
+		return h.Shell.Execute(m)
+	}
+	if h.Command != nil {
+		return h.Command.Execute(m)
+	}
+	return nil, fmt.Errorf("(no reach code)")
+}
+
 type OutputLog struct {
 	File string `yaml:"file"`
+	// Hooks are the extention for special argmentation. Multiple Hooks can be
+	// set. You can change the data structure as you like by using an external
+	// mechanism called flowctl agent. Hooks are arrays and are executed in order.
+	// If a Hook fails, the log data will be lost.
+	Hooks []Hook `yaml:"hooks"`
 }
 
 type Output struct {
