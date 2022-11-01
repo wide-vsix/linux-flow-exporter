@@ -52,8 +52,7 @@ type Hook struct {
 	// ## Example
 	// ```
 	// hooks:
-	// - command:
-	//     cmd: /usr/bin/cmd1
+	// - command: /usr/bin/cmd1
 	// ```
 	Command *hook.Command `yaml:"command"`
 	// Shell is the backend that executes the external program. It is similar to
@@ -63,10 +62,10 @@ type Hook struct {
 	// and so on.
 	//
 	// ## Example ``` hooks: - name: test hook1
-	//   shell:
-	//     shell: |
-	//       #!/bin/sh
-	//       echo `cat` | jq --arg hostname $(hostname) '. + {hostname: $hostname}'
+	// hooks:
+	// - shell: |
+	//     #!/bin/sh
+	//     echo `cat` | jq --arg hostname $(hostname) '. + {hostname: $hostname}'
 	// ```
 	Shell *hook.Shell `yaml:"shell"`
 }
