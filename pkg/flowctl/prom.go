@@ -40,7 +40,7 @@ var (
 			Name:      "overflow_pkts",
 			Help:      "eBPF map overflow counter for each interfaces",
 		},
-		[]string{"ifindex"},
+		[]string{"ingressIfindex", "egressIfindex"},
 	)
 	// overflowBytes represents "total" of bytes couldn't be metered
 	overflowBytes = promauto.NewGaugeVec(
@@ -49,7 +49,7 @@ var (
 			Name:      "overflow_bytes",
 			Help:      "eBPF map overflow counter for each interfaces",
 		},
-		[]string{"ifindex"},
+		[]string{"ingressIfindex", "egressIfindex"},
 	)
 	// totalPkts represents "total" of pkts could be metered
 	totalPkts = promauto.NewGaugeVec(
@@ -58,7 +58,7 @@ var (
 			Name:      "total_pkts",
 			Help:      "eBPF map total counter for each interfaces",
 		},
-		[]string{"ifindex"},
+		[]string{"ingressIfindex", "egressIfindex"},
 	)
 	// totalBytes represents "total" of bytes could be metered
 	totalBytes = promauto.NewGaugeVec(
@@ -67,7 +67,15 @@ var (
 			Name:      "total_bytes",
 			Help:      "eBPF map total counter for each interfaces",
 		},
-		[]string{"ifindex"},
+		[]string{"ingressIfindex", "egressIfindex"},
+	)
+	// totalLatencyNanoseconds sums up the total time taken for the transfer.
+	totalLatencyNanoseconds = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "total_latency_nanoseconds",
+		},
+		[]string{"ingressIfindex", "egressIfindex"},
 	)
 )
 
@@ -78,14 +86,16 @@ func threadMetricsExporter() error {
 			if err != nil {
 				continue
 			}
-			for ifindex, metrics := range stats {
+			for key, metrics := range stats {
 				l := prometheus.Labels{
-					"ifindex": fmt.Sprintf("%d", ifindex),
+					"ingressIfindex": fmt.Sprintf("%d", key.IngressIfindex),
+					"egressIfindex":  fmt.Sprintf("%d", key.EgressIfindex),
 				}
 				overflowPkts.With(l).Set(float64(metrics.OverflowPkts))
 				overflowBytes.With(l).Set(float64(metrics.OverflowBytes))
 				totalPkts.With(l).Set(float64(metrics.TotalPkts))
 				totalBytes.With(l).Set(float64(metrics.TotalBytes))
+				totalLatencyNanoseconds.With(l).Set(float64(metrics.TotalLatencyNanoseconds))
 			}
 			time.Sleep(time.Second)
 		}

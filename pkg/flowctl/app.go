@@ -163,13 +163,13 @@ func NewCommandEbpfCodeDump() *cobra.Command {
 	return cmd
 }
 
-func getTcEbpfByteCode(netns, dev string) (string, error) {
+func getTcEbpfByteCode(netns, dev, direction string) (string, error) {
 	clsActIsEnabled, err := goroute2.ClsActIsEnabled(netns, dev)
 	if err != nil {
 		return "", err
 	}
 	if clsActIsEnabled {
-		rules, err := goroute2.ListTcFilterRules(netns, dev)
+		rules, err := goroute2.ListTcFilterRules(netns, dev, direction)
 		if err != nil {
 			return "", err
 		}
@@ -182,8 +182,8 @@ func getTcEbpfByteCode(netns, dev string) (string, error) {
 	return "", nil
 }
 
-func getFlowMeterByteCode(netns, dev string) (*FlowMeterByteCode, error) {
-	bpfname, err := getTcEbpfByteCode(netns, dev)
+func getFlowMeterByteCode(netns, dev, dir string) (*FlowMeterByteCode, error) {
+	bpfname, err := getTcEbpfByteCode(netns, dev, dir)
 	if err != nil {
 		return nil, err
 	}

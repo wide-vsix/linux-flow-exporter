@@ -43,12 +43,12 @@ type TcFilterRule struct {
 	} `json:"options"`
 }
 
-func ListTcFilterRules(netns, dev string) ([]TcFilterRule, error) {
+func ListTcFilterRules(netns, dev, dir string) ([]TcFilterRule, error) {
 	n := ""
 	if netns != "" {
 		n = fmt.Sprintf("ip netns exec %s", netns)
 	}
-	o, err := util.LocalExecutef("%s tc -j filter list dev %s egress", n, dev)
+	o, err := util.LocalExecutef("%s tc -j filter list dev %s %s", n, dev, dir)
 	if err != nil {
 		return nil, err
 	}

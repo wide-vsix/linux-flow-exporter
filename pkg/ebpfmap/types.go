@@ -120,28 +120,34 @@ func GetMapIDsByNameType(mapName string, mapType ebpf.MapType) ([]ebpf.MapID, er
 	return ids, nil
 }
 
-type StatsMetricsVal struct {
-	SynPkts       uint32 `json:"syn_pkts"`
-	OverflowPkts  uint32 `json:"overflow_pkts"`
-	OverflowBytes uint32 `json:"overflow_bytes"`
-	TotalPkts     uint32 `json:"total_pkts"`
-	TotalBytes    uint32 `json:"total_bytes"`
+type StatsMetricsKey struct {
+	IngressIfindex uint32 `json:"ingress_ifindex"`
+	EgressIfindex  uint32 `json:"egress_ifindex"`
 }
 
-func GetStats() (map[uint32]StatsMetricsVal, error) {
+type StatsMetricsVal struct {
+	SynPkts                 uint32 `json:"syn_pkts"`
+	TotalPkts               uint32 `json:"total_pkts"`
+	TotalBytes              uint32 `json:"total_bytes"`
+	OverflowPkts            uint32 `json:"overflow_pkts"`
+	OverflowBytes           uint32 `json:"overflow_bytes"`
+	TotalLatencyNanoseconds uint32 `json:"latency_nano_sum"`
+}
+
+func GetStats() (map[StatsMetricsKey]StatsMetricsVal, error) {
 	ids, err := GetMapIDsByNameType(metricsMapName, metricsMapType)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := map[uint32]StatsMetricsVal{}
+	ret := map[StatsMetricsKey]StatsMetricsVal{}
 	for _, id := range ids {
 		m, err := ebpf.NewMapFromID(id)
 		if err != nil {
 			return nil, err
 		}
 
-		var key uint32
+		key := StatsMetricsKey{}
 		perCpuVals := []StatsMetricsVal{}
 		entries := m.Iterate()
 		for entries.Next(&key, &perCpuVals) {
@@ -152,6 +158,7 @@ func GetStats() (map[uint32]StatsMetricsVal, error) {
 				val.OverflowBytes += perCpuVal.OverflowBytes
 				val.TotalPkts += perCpuVal.TotalPkts
 				val.TotalBytes += perCpuVal.TotalBytes
+				val.TotalLatencyNanoseconds += perCpuVal.TotalLatencyNanoseconds
 			}
 			ret[key] = val
 		}
