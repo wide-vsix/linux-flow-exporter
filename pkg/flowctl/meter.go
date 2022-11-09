@@ -56,7 +56,6 @@ var cliOptMeter = struct {
 		//   eth1       <--- default network namespace
 		//   netns0:*   <--- all device in netns0
 		Interface string
-		Section   string
 		Pref      uint
 		Chain     uint
 		Handle    uint
@@ -99,61 +98,33 @@ func NewCommandMeterAttach() *cobra.Command {
 			}
 
 			for _, link := range links {
-				bc, err := NewFlowMeterByteCode(netns, link.Ifname,
-					uint16(cliOptMeter.Attach.InterfaceMaxFlowLimit))
+				ec, err := meterAttachOne(netns, link.Ifname, "egress", "tc-egress")
 				if err != nil {
 					return err
 				}
-
-				// Enable cls act if it's disabled
-				if err := goroute2.EnsureClsactEnabled(netns, link.Ifname); err != nil {
-					return err
-				}
-
-				attached, bpfname, err := bpfIsAttached(netns, link.Ifname,
-					cliOptMeter.Attach.Pref, cliOptMeter.Attach.Chain,
-					cliOptMeter.Attach.Handle)
+				ic, err := meterAttachOne(netns, link.Ifname, "ingress", "tc-ingress")
 				if err != nil {
 					return err
 				}
-
-				changed := false
-				requestAttach := false
-
-				if attached {
-					same, err := bc.SameDigest(bpfname)
-					if err != nil {
-						return err
-					}
-					if same {
-						// donothing
-					} else {
-						if err := bpfDetach(netns, link.Ifname, cliOptMeter.Attach.Pref,
-							cliOptMeter.Attach.Chain, cliOptMeter.Attach.Handle,
-							cliOptMeter.Attach.Dry); err != nil {
-							return err
-						}
-						changed = true
-						requestAttach = true
-					}
-				} else {
-					requestAttach = true
+				xc, err := meterXdpAttachOne(netns, link.Ifname, "xdpgeneric", "xdp-ingress")
+				if err != nil {
+					return err
 				}
-
-				if requestAttach {
-					if err := bpfAttach(netns, link.Ifname, cliOptMeter.Attach.Pref,
-						cliOptMeter.Attach.Chain, cliOptMeter.Attach.Handle, bc,
-						cliOptMeter.Attach.Section, cliOptMeter.Attach.Dry); err != nil {
-						return err
-					}
-					changed = true
+				echangedStr := " (unchanged)"
+				if ec {
+					echangedStr = " (changed)"
 				}
-
-				changedStr := " (unchanged)"
-				if changed {
-					changedStr = " (changed)"
+				ichangedStr := " (unchanged)"
+				if ic {
+					ichangedStr = " (changed)"
 				}
-				fmt.Printf("%s:%s%s\n", netns, link.Ifname, changedStr)
+				xchangedStr := " (unchanged)"
+				if xc {
+					xchangedStr = " (changed)"
+				}
+				fmt.Printf("%s:%s:egress%s\n", netns, link.Ifname, echangedStr)
+				fmt.Printf("%s:%s:ingress%s\n", netns, link.Ifname, ichangedStr)
+				fmt.Printf("%s:%s:xdp%s\n", netns, link.Ifname, xchangedStr)
 			}
 
 			return nil
@@ -161,12 +132,10 @@ func NewCommandMeterAttach() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&cliOptMeter.Attach.Dry, "dry", false, "Dry run mode")
 	cmd.Flags().BoolVarP(&cliOptMeter.Attach.Force, "force", "f", false,
-		"Force current ebpf bytecode when the byte code is different."+
-			"It's not replace when the byte code is not different")
+		"Force re-attach ebpf bytecode when the byte code is not different."+
+			"It's not replace when the byte code is not different with force=false")
 	cmd.Flags().StringVarP(&cliOptMeter.Attach.Interface, "interface", "i", "",
 		"Target network namespace and device name (NETNS:DEV or DEV)")
-	cmd.Flags().StringVar(&cliOptMeter.Attach.Section, "section",
-		"tc-egress", "Target section name of bpf byte code")
 	cmd.Flags().UintVar(&cliOptMeter.Attach.Pref, "pref", 100,
 		"Target preference idx of tc-egress")
 	cmd.Flags().UintVar(&cliOptMeter.Attach.Chain, "chain", 0,
@@ -188,11 +157,6 @@ func NewCommandMeterDetach() *cobra.Command {
 				return err
 			}
 
-			netnsPreCmd := ""
-			if netns != "" {
-				netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
-			}
-
 			links, err := goroute2.ListLinkMatch(netns, device)
 			if err != nil {
 				return err
@@ -201,8 +165,8 @@ func NewCommandMeterDetach() *cobra.Command {
 			for _, link := range links {
 				changed := false
 
-				// Delete rule if exist
-				rules, err := goroute2.ListTcFilterRules(netns, link.Ifname)
+				// Delete TC-BPF-egress if exist
+				rules, err := goroute2.ListTcFilterRules(netns, link.Ifname, "egress")
 				if err != nil {
 					return err
 				}
@@ -210,19 +174,47 @@ func NewCommandMeterDetach() *cobra.Command {
 					if rule.Pref == cliOptMeter.Detach.Pref &&
 						rule.Chain == cliOptMeter.Detach.Chain &&
 						rule.Options.Handle == fmt.Sprintf("0x%x", cliOptMeter.Detach.Handle) {
-						if !cliOptMeter.Detach.Dry {
-							if _, err := util.LocalExecutef("%s tc filter del dev %s egress "+
-								"pref %d chain %d handle 0x%x bpf", netnsPreCmd, link.Ifname,
-								cliOptMeter.Detach.Pref, cliOptMeter.Detach.Chain,
-								cliOptMeter.Detach.Handle,
-							); err != nil {
-								return err
-							}
+						if err := bpfDetach(netns, link.Ifname, "egress",
+							cliOptMeter.Detach.Pref, cliOptMeter.Detach.Chain,
+							cliOptMeter.Detach.Handle, cliOptMeter.Detach.Dry); err != nil {
+							return err
 						}
 						changed = true
 					}
 				}
 
+				// Delete TC-BPF-ingress if exist
+				irules, err := goroute2.ListTcFilterRules(netns, link.Ifname, "ingress")
+				if err != nil {
+					return err
+				}
+				for _, rule := range irules {
+					if rule.Pref == cliOptMeter.Detach.Pref &&
+						rule.Chain == cliOptMeter.Detach.Chain &&
+						rule.Options.Handle == fmt.Sprintf("0x%x", cliOptMeter.Detach.Handle) {
+						if err := bpfDetach(netns, link.Ifname, "ingress",
+							cliOptMeter.Detach.Pref, cliOptMeter.Detach.Chain,
+							cliOptMeter.Detach.Handle, cliOptMeter.Detach.Dry); err != nil {
+							return err
+						}
+						changed = true
+					}
+				}
+
+				// Detach XDP if exist
+				xdpAttached, err := xdpBpfIsAttached(netns, link.Ifname)
+				if err != nil {
+					return err
+				}
+				if xdpAttached {
+					if err := xdpBpfDetach(netns, link.Ifname,
+						cliOptMeter.Detach.Dry); err != nil {
+						return err
+					}
+					changed = true
+				}
+
+				// Print result
 				tmp := netns
 				if tmp == "" {
 					tmp = "DEFAULT"
@@ -266,7 +258,13 @@ func NewCommandMeterStatus() *cobra.Command {
 				}
 				for _, link := range links {
 					if link.Ifname != "lo" {
-						if err := printStatus(netns, link.Ifname); err != nil {
+						if err := printStatusXdp(netns, link.Ifname); err != nil {
+							return err
+						}
+						if err := printStatus(netns, link.Ifname, "egress"); err != nil {
+							return err
+						}
+						if err := printStatus(netns, link.Ifname, "ingress"); err != nil {
 							return err
 						}
 					}
@@ -280,7 +278,13 @@ func NewCommandMeterStatus() *cobra.Command {
 			}
 			for _, link := range links {
 				if link.Ifname != "lo" {
-					if err := printStatus("", link.Ifname); err != nil {
+					if err := printStatusXdp("", link.Ifname); err != nil {
+						return err
+					}
+					if err := printStatus("", link.Ifname, "egress"); err != nil {
+						return err
+					}
+					if err := printStatus("", link.Ifname, "ingress"); err != nil {
 						return err
 					}
 				}
@@ -412,9 +416,17 @@ func (v FlowMeterByteCode) SameDigest(bpfname string) (bool, error) {
 	return bc.Digest == v.Digest, nil
 }
 
-func bpfIsAttached(netns, device string,
+func xdpBpfIsAttached(netns, device string) (bool, error) {
+	ld, err := goroute2.GetLinkDetail(netns, device)
+	if err != nil {
+		return false, err
+	}
+	return ld.Xdp != nil, nil
+}
+
+func bpfIsAttached(netns, device, direction string,
 	pref, chain, handle uint) (bool, string, error) {
-	rules, err := goroute2.ListTcFilterRules(netns, device)
+	rules, err := goroute2.ListTcFilterRules(netns, device, direction)
 	if err != nil {
 		return false, "", err
 	}
@@ -428,39 +440,102 @@ func bpfIsAttached(netns, device string,
 	return false, "", nil
 }
 
-func bpfDetach(netns, device string, pref, chain, handle uint, dry bool) error {
+func xdpBpfDetach(netns, device string, dry bool) error {
 	netnsPreCmd := ""
 	if netns != "" {
 		netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
 	}
 	if !dry {
-		if _, err := util.LocalExecutef("%s tc filter del dev %s egress "+
-			"pref %d chain %d handle 0x%x bpf",
-			netnsPreCmd, device, pref, chain, handle); err != nil {
+		ld, err := goroute2.GetLinkDetail(netns, device)
+		if err != nil {
+			return err
+		}
+		if ld.Xdp == nil {
+			return fmt.Errorf("xdp isnot attached")
+		}
+		mode := "xdp"
+		if ld.Xdp.Mode == 2 {
+			mode = "xdpgeneric"
+		}
+		if _, err := util.LocalExecutef("%s ip link set %s %s off",
+			netnsPreCmd, device, mode); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func bpfAttach(netns, device string, pref, chain, handle uint,
+func bpfDetach(netns, device, direction string, pref, chain, handle uint,
+	dry bool) error {
+	netnsPreCmd := ""
+	if netns != "" {
+		netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
+	}
+	if !dry {
+		if _, err := util.LocalExecutef("%s tc filter del dev %s %s "+
+			"pref %d chain %d handle 0x%x bpf",
+			netnsPreCmd, device, direction, pref, chain, handle); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func bpfAttach(netns, device, direction string, pref, chain, handle uint,
 	bc *FlowMeterByteCode, section string, dry bool) error {
 	netnsPreCmd := ""
 	if netns != "" {
 		netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
 	}
 	if !dry {
-		if _, err := util.LocalExecutef("%s tc filter add dev %s egress "+
+		if out, err := util.LocalExecutef("%s tc filter add dev %s %s "+
 			"pref %d chain %d handle 0x%x bpf obj %s section %s", netnsPreCmd, device,
+			direction,
 			pref, chain, handle, bc.EncodeToFilename(), section); err != nil {
+			println(out)
 			return err
 		}
 	}
 	return nil
 }
 
-func printStatus(netns, device string) error {
-	bc, err := getFlowMeterByteCode(netns, device)
+func xdpBpfAttach(netns, device, mode string,
+	bc *FlowMeterByteCode, section string, dry bool) error {
+	netnsPreCmd := ""
+	if netns != "" {
+		netnsPreCmd = fmt.Sprintf("ip netns exec %s", netns)
+	}
+	if !dry {
+		if out, err := util.LocalExecutef("%s ip link set %s %s obj %s sec %s",
+			netnsPreCmd, device, mode, bc.EncodeToFilename(), section); err != nil {
+			println(out)
+			return err
+		}
+	}
+	return nil
+}
+
+func printStatusXdp(netns, device string) error {
+	ld, err := goroute2.GetLinkDetail(netns, device)
+	if err != nil {
+		return err
+	}
+	if netns == "" {
+		netns = "DEFAULT"
+	}
+	if ld.Xdp == nil {
+		fmt.Printf("%s:%s:xdp = <nil>\n", netns, device)
+	} else {
+		fmt.Printf("%s:%s:xdp.id = %d\n", netns, device, ld.Xdp.Prog.ID)
+		fmt.Printf("%s:%s:xdp.mode = %s\n", netns, device, ld.Xdp.Mode.String())
+		fmt.Printf("%s:%s:xdp.jited = %d\n", netns, device, ld.Xdp.Prog.Jited)
+		fmt.Printf("%s:%s:xdp.loadTime = %d\n", netns, device, ld.Xdp.Prog.LoadTime)
+	}
+	return nil
+}
+
+func printStatus(netns, device, direction string) error {
+	bc, err := getFlowMeterByteCode(netns, device, direction)
 	if err != nil {
 		return err
 	}
@@ -468,11 +543,109 @@ func printStatus(netns, device string) error {
 		netns = "DEFAULT"
 	}
 	if bc == nil {
-		fmt.Printf("%s:%s = <nil>\n", netns, device)
+		fmt.Printf("%s:%s:%s = <nil>\n", netns, device, direction)
 	} else {
-		fmt.Printf("%s:%s.digest = %s\n", netns, device, bc.Digest)
-		fmt.Printf("%s:%s.limit = %d\n", netns, device, bc.InterfaceMaxFlowLimit)
-		fmt.Printf("%s:%s.attached = %s\n", netns, device, bc.AttachedTime.String())
+		fmt.Printf("%s:%s:%s.digest = %s\n", netns, device, direction, bc.Digest)
+		fmt.Printf("%s:%s:%s.limit = %d\n", netns, device, direction, bc.InterfaceMaxFlowLimit)
+		fmt.Printf("%s:%s:%s.attached = %s\n", netns, device, direction, bc.AttachedTime.String())
 	}
 	return nil
+}
+
+func meterXdpAttachOne(netns, ifname, mode, section string) (bool, error) {
+	bc, err := NewFlowMeterByteCode(netns, ifname,
+		uint16(cliOptMeter.Attach.InterfaceMaxFlowLimit))
+	if err != nil {
+		return false, err
+	}
+
+	changed := false
+	requestAttach := false
+	xdpAttached, err := xdpBpfIsAttached(netns, ifname)
+	if err != nil {
+		return false, err
+	}
+	if !xdpAttached {
+		requestAttach = true
+	}
+
+	if xdpAttached && cliOptMeter.Attach.Force {
+		if err := xdpBpfDetach(netns, ifname, cliOptMeter.Attach.Dry); err != nil {
+			return false, err
+		}
+		changed = true
+	}
+
+	if requestAttach {
+		if err := xdpBpfAttach(netns, ifname, mode, bc, section,
+			cliOptMeter.Attach.Dry); err != nil {
+			return false, err
+		}
+		changed = true
+	}
+	return changed, nil
+}
+
+func meterAttachOne(netns, ifname, direction, section string) (bool, error) {
+	bc, err := NewFlowMeterByteCode(netns, ifname,
+		uint16(cliOptMeter.Attach.InterfaceMaxFlowLimit))
+	if err != nil {
+		return false, err
+	}
+
+	// Enable cls act if it's disabled
+	if err := goroute2.EnsureClsactEnabled(netns, ifname); err != nil {
+		return false, err
+	}
+
+	attached, bpfname, err := bpfIsAttached(netns, ifname, direction,
+		cliOptMeter.Attach.Pref, cliOptMeter.Attach.Chain,
+		cliOptMeter.Attach.Handle)
+	if err != nil {
+		return false, err
+	}
+
+	changed := false
+	requestAttach := false
+
+	if attached {
+		same, err := bc.SameDigest(bpfname)
+		if err != nil {
+			return false, err
+		}
+		if same {
+			if cliOptMeter.Attach.Force {
+				if err := bpfDetach(netns, ifname, direction, cliOptMeter.Attach.Pref,
+					cliOptMeter.Attach.Chain, cliOptMeter.Attach.Handle,
+					cliOptMeter.Attach.Dry); err != nil {
+					return false, err
+				}
+				changed = true
+				requestAttach = true
+			} else {
+				// donothing
+			}
+			// donothing
+		} else {
+			if err := bpfDetach(netns, ifname, direction, cliOptMeter.Attach.Pref,
+				cliOptMeter.Attach.Chain, cliOptMeter.Attach.Handle,
+				cliOptMeter.Attach.Dry); err != nil {
+				return false, err
+			}
+			changed = true
+			requestAttach = true
+		}
+	} else {
+		requestAttach = true
+	}
+
+	if requestAttach {
+		if err := bpfAttach(netns, ifname, direction, cliOptMeter.Attach.Pref,
+			cliOptMeter.Attach.Chain, cliOptMeter.Attach.Handle, bc,
+			section, cliOptMeter.Attach.Dry); err != nil {
+			return false, err
+		}
+		changed = true
+	}
+	return changed, nil
 }

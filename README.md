@@ -103,6 +103,10 @@ REFS
 - [Packet mark in a Cloud Native world, LPC](https://lpc.events/event/7/contributions/683/attachments/554/979/lpc20-pkt-mark-slides.pdf)
 - [VMware NSX IPFIX for Distributed Firewall](https://docs.vmware.com/en/VMware-NSX-Data-Center-for-vSphere/6.4/com.vmware.nsx.admin.doc/GUID-2C625B52-17F0-4604-B5C9-6DF1FA9A70F8.html)
 - [VMware NSX IPFIX for Logical Switch](https://docs.vmware.com/en/VMware-NSX-Data-Center-for-vSphere/6.4/com.vmware.nsx.admin.doc/GUID-6054CF07-3019-4539-A6CC-1F613E275E27.html)
+- [Comparison and Practice of packet processing implementations and acceleration methods (ja), Ebiken-san, Higebu-san, JANOG45](https://www.janog.gr.jp/meeting/janog45/program/pktfwd/)
+- [IN-kernel metadata propagation technique from XDP buffer to SKB](https://github.com/torvalds/linux/blob/master/samples/bpf/xdp2skb_meta_kern.c)
+- [Private Discussion for metadata practice in eBPF](https://netmoles.slack.com/archives/C01DYBEETN0/p1667363998874089)
+- [One of the Reference design for traffic control mech using eBPF(both xdp and tc), ENOG63 by Higebu-san](https://www.docswell.com/s/higebu/ZQWRMZ-xdp-based-mobile-network-data-plane#p21)
 
 ## Specification
 

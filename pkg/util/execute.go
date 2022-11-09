@@ -19,6 +19,7 @@ limitations under the License.
 package util
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 
@@ -31,13 +32,20 @@ func SetLocalExecuteSilence(v bool) {
 	silence = v
 }
 
-func LocalExecute(cmd string) (string, error) {
-	out, err := exec.Command("sh", "-c", cmd).Output()
-	if err != nil {
+func LocalExecute(cmdstr string) (string, error) {
+	stdoutbuf := bytes.Buffer{}
+	stderrbuf := bytes.Buffer{}
+
+	cmd := exec.Command("sh", "-c", cmdstr)
+	cmd.Stdout = &stdoutbuf
+	cmd.Stderr = &stderrbuf
+
+	if err := cmd.Run(); err != nil {
 		str := fmt.Sprintf("CommandExecute [%s] ", cmd)
 		str += color.RedString("Failed")
 		str += color.RedString("%s", err.Error())
-		fmt.Printf("%s\n", str)
+		println(str)
+		println(stderrbuf.String())
 		return "", err
 	}
 
@@ -46,7 +54,7 @@ func LocalExecute(cmd string) (string, error) {
 		str += color.GreenString("Success")
 		fmt.Printf("%s\n", str)
 	}
-	return string(out), nil
+	return stdoutbuf.String(), nil
 }
 
 func LocalExecutef(fs string, a ...interface{}) (string, error) {
