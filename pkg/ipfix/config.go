@@ -81,15 +81,15 @@ func (h Hook) Valid() bool {
 	return cnt == 1
 }
 
-func (h Hook) Execute(m map[string]interface{}) (map[string]interface{}, error) {
+func (h Hook) ExecuteBatch(m []map[string]interface{}) ([]map[string]interface{}, error) {
 	if !h.Valid() {
 		return nil, fmt.Errorf("invalid hook")
 	}
 	if h.Shell != nil {
-		return h.Shell.Execute(m)
+		return h.Shell.ExecuteBatch(m)
 	}
 	if h.Command != nil {
-		return h.Command.Execute(m)
+		return h.Command.ExecuteBatch(m)
 	}
 	return nil, fmt.Errorf("(no reach code)")
 }

@@ -28,7 +28,9 @@ type Command string
 
 var _ Hook = (*Command)(nil)
 
-func (c Command) Execute(in map[string]interface{}) (map[string]interface{}, error) {
+func (c Command) ExecuteBatch(in []map[string]interface{}) (
+	[]map[string]interface{}, error) {
+
 	// Prepare input/output
 	stdoutbuf := bytes.Buffer{}
 	stderrbuf := bytes.Buffer{}
@@ -48,7 +50,7 @@ func (c Command) Execute(in map[string]interface{}) (map[string]interface{}, err
 	}
 
 	// Convert back to map data from json-bytes
-	out := map[string]interface{}{}
+	out := []map[string]interface{}{}
 	if err := json.Unmarshal(stdoutbuf.Bytes(), &out); err != nil {
 		return nil, err
 	}

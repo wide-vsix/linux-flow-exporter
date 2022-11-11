@@ -261,15 +261,19 @@ func threadFlowExporter() error {
 			if len(ebpfFlows) == 0 {
 				continue
 			}
-			if err := flushCaches(config); err != nil {
+
+			before := time.Now()
+			nFlows, err := flushCaches(config)
+			if err != nil {
 				return err
 			}
 			if err := ebpfmap.DeleteAll(); err != nil {
 				return err
 			}
+			slog.Info("force drain current flows", "usec",
+				time.Since(before).Microseconds(), "nFlows", nFlows)
 
 		case <-tickerFinished.C:
-			slog.Info("drain finished flow")
 			ebpfFlows, err := ebpfmap.Dump()
 			if err != nil {
 				return err
@@ -277,15 +281,21 @@ func threadFlowExporter() error {
 			if len(ebpfFlows) == 0 {
 				continue
 			}
-			if err := flushCachesFinished(config); err != nil {
+
+			before := time.Now()
+			nFlows, err := flushCachesFinished(config)
+			if err != nil {
 				return err
+			}
+			if nFlows > 0 {
+				slog.Info("drain finished flows", "usec",
+					time.Since(before).Microseconds(), "nFlows", nFlows)
 			}
 			if err := ebpfmap.DeleteFinished(); err != nil {
 				return err
 			}
 
 		case <-ticketForce.C:
-			slog.Info("force drain current flows")
 			ebpfFlows, err := ebpfmap.Dump()
 			if err != nil {
 				return err
@@ -293,12 +303,17 @@ func threadFlowExporter() error {
 			if len(ebpfFlows) == 0 {
 				continue
 			}
-			if err := flushCaches(config); err != nil {
+
+			before := time.Now()
+			nFlows, err := flushCaches(config)
+			if err != nil {
 				return err
 			}
 			if err := ebpfmap.DeleteAll(); err != nil {
 				return err
 			}
+			slog.Info("force drain current flows", "usec",
+				time.Since(before).Microseconds(), "nFlows", nFlows)
 		case <-tickerForTemplateFlush.C:
 			slog.Info("flush ipfix template")
 			buf1 := bytes.Buffer{}
@@ -328,10 +343,10 @@ func threadFlowExporter() error {
 	}
 }
 
-func flushCachesFinished(config ipfix.Config) error {
+func flushCachesFinished(config ipfix.Config) (int, error) {
 	ebpfFlows0, err := ebpfmap.Dump()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	ebpfFlows := []ebpfmap.Flow{}
 	for _, ebpfFlow := range ebpfFlows0 {
@@ -342,80 +357,81 @@ func flushCachesFinished(config ipfix.Config) error {
 
 	for _, o := range config.Outputs {
 		if !o.Valid() {
-			return fmt.Errorf("invalid config")
+			return 0, fmt.Errorf("invalid config")
 		}
 		if o.Log != nil {
 			if err := FlowOutputLog(ebpfFlows, o.Log.File, *o.Log); err != nil {
-				return err
+				return 0, err
 			}
 		}
 
 		if o.Collector != nil {
 			flow, err := ebpfmap.ToIpfixFlowFile(ebpfFlows)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			flowDataMessages, err := flow.ToFlowDataMessages(&config, 0)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			for _, flowDataMessage := range flowDataMessages {
 				flowDataMessage.Header.SysupTime = uint32(util.TimeNow())
 				buf2 := bytes.Buffer{}
 				if err := flowDataMessage.Write(&buf2, &config); err != nil {
-					return err
+					return 0, err
 				}
 				if err := util.UdpTransmit(o.Collector.LocalAddress,
 					o.Collector.RemoteAddress, &buf2); err != nil {
-					return err
+					return 0, err
 				}
 			}
 		}
 	}
-	return nil
+	return len(ebpfFlows), err
 }
 
-func flushCaches(config ipfix.Config) error {
+func flushCaches(config ipfix.Config) (int, error) {
 	ebpfFlows, err := ebpfmap.Dump()
+	nFlows := len(ebpfFlows)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for _, o := range config.Outputs {
 		if !o.Valid() {
-			return fmt.Errorf("invalid config")
+			return 0, fmt.Errorf("invalid config")
 		}
 		if o.Log != nil {
 			if err := FlowOutputLog(ebpfFlows, o.Log.File, *o.Log); err != nil {
-				return err
+				return 0, err
 			}
 		}
 
 		if o.Collector != nil {
 			flow, err := ebpfmap.ToIpfixFlowFile(ebpfFlows)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			flowDataMessages, err := flow.ToFlowDataMessages(&config, 0)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			for _, flowDataMessage := range flowDataMessages {
 				flowDataMessage.Header.SysupTime = uint32(util.TimeNow())
 				buf2 := bytes.Buffer{}
 				if err := flowDataMessage.Write(&buf2, &config); err != nil {
-					return err
+					return 0, err
 				}
 				if err := util.UdpTransmit(o.Collector.LocalAddress,
 					o.Collector.RemoteAddress, &buf2); err != nil {
-					return err
+					return 0, err
 				}
 			}
 		}
 	}
-	return nil
+	return nFlows, nil
 }
 
-func FlowOutputLog(flows []ebpfmap.Flow, out string, o ipfix.OutputLog) error {
+func getlogger(out string) logr.Logger {
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
 		out,
@@ -425,13 +441,53 @@ func FlowOutputLog(flows []ebpfmap.Flow, out string, o ipfix.OutputLog) error {
 		panic(fmt.Sprintf("who watches the watchmen (%v)?", err))
 	}
 	log := zapr.NewLogger(zapLog)
+	return log
 
-	for _, flow := range flows {
-		args, err := flow.ToZap(o)
+}
+
+func ebpflowsToMapArray(flows []ebpfmap.Flow) []map[string]interface{} {
+	flowTmp := []map[string]interface{}{}
+	for _, f := range flows {
+		flowTmp = append(flowTmp, map[string]interface{}{
+			"src":            util.ConvertUint32ToIP(f.Key.Saddr).String(),
+			"dst":            util.ConvertUint32ToIP(f.Key.Daddr).String(),
+			"proto":          f.Key.Proto,
+			"sport":          f.Key.Sport,
+			"dport":          f.Key.Dport,
+			"ingressIfindex": f.Key.IngressIfindex,
+			"egressIfindex":  f.Key.EgressIfindex,
+			"pkts":           f.Val.FlowPkts,
+			"bytes":          f.Val.FlowBytes,
+			"action":         f.Key.Mark,
+			"start":          f.Val.FlowStartMilliSecond,
+			"end":            f.Val.FlowEndMilliSecond,
+			"finished":       f.Val.Finished,
+		})
+	}
+	return flowTmp
+}
+
+func tozap(m map[string]interface{}) []interface{} {
+	ret := []interface{}{}
+	for key, val := range m {
+		ret = append(ret, key, val)
+	}
+	return ret
+}
+
+func FlowOutputLog(flows []ebpfmap.Flow, out string, o ipfix.OutputLog) error {
+	flowTmp := ebpflowsToMapArray(flows)
+	for _, h := range o.Hooks {
+		var err error
+		flowTmp, err = h.ExecuteBatch(flowTmp)
 		if err != nil {
 			return err
 		}
-		log.Info("flowlog", args...)
+	}
+
+	log := getlogger(out)
+	for _, flow := range flowTmp {
+		log.Info("flowlog", tozap(flow)...)
 	}
 	return nil
 }
