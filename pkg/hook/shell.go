@@ -30,7 +30,9 @@ type Shell string
 
 var _ Hook = (*Shell)(nil)
 
-func (s Shell) Execute(in map[string]interface{}) (map[string]interface{}, error) {
+func (s Shell) ExecuteBatch(in []map[string]interface{}) (
+	[]map[string]interface{}, error) {
+
 	// Create temp file from hook shell script
 	hash := sha1.New()
 	hash.Write([]byte(s))
@@ -58,7 +60,7 @@ func (s Shell) Execute(in map[string]interface{}) (map[string]interface{}, error
 	}
 
 	// Convert back to map data from json-bytes
-	out := map[string]interface{}{}
+	out := []map[string]interface{}{}
 	if err := json.Unmarshal(stdoutbuf.Bytes(), &out); err != nil {
 		return nil, err
 	}

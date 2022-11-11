@@ -18,5 +18,5 @@ limitations under the License.
 package hook
 
 type Hook interface {
-	Execute(in map[string]interface{}) (map[string]interface{}, error)
+	ExecuteBatch(in []map[string]interface{}) ([]map[string]interface{}, error)
 }
