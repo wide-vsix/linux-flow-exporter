@@ -107,6 +107,7 @@ REFS
 - [IN-kernel metadata propagation technique from XDP buffer to SKB](https://github.com/torvalds/linux/blob/master/samples/bpf/xdp2skb_meta_kern.c)
 - [Private Discussion for metadata practice in eBPF](https://netmoles.slack.com/archives/C01DYBEETN0/p1667363998874089)
 - [One of the Reference design for traffic control mech using eBPF(both xdp and tc), ENOG63 by Higebu-san](https://www.docswell.com/s/higebu/ZQWRMZ-xdp-based-mobile-network-data-plane#p21)
+- [An open, unofficial registry of linux packet mark bits (aka fwmark, connmark, netfilter, iptables, nftables)](https://github.com/fwmark/registry)
 
 ## Specification
 
