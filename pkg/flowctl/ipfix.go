@@ -27,6 +27,7 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/wide-vsix/linux-flow-exporter/pkg/ebpfmap"
 	"github.com/wide-vsix/linux-flow-exporter/pkg/ipfix"
@@ -431,11 +432,18 @@ func flushCaches(config ipfix.Config) (int, error) {
 	return nFlows, nil
 }
 
+func epochMillisTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	nanos := t.UnixNano()
+	millis := nanos / int64(time.Millisecond)
+	enc.AppendInt64(millis)
+}
+
 func getlogger(out string) logr.Logger {
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
 		out,
 	}
+	cfg.EncoderConfig.EncodeTime = epochMillisTimeEncoder
 	zapLog, err := cfg.Build()
 	if err != nil {
 		panic(fmt.Sprintf("who watches the watchmen (%v)?", err))
