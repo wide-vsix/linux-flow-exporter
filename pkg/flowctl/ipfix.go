@@ -445,9 +445,18 @@ func getlogger(out string) logr.Logger {
 
 }
 
-func ebpflowsToMapArray(flows []ebpfmap.Flow) []map[string]interface{} {
+func ebpflowsToMapArray(flows []ebpfmap.Flow) ([]map[string]interface{}, error) {
 	flowTmp := []map[string]interface{}{}
 	for _, f := range flows {
+		start, err := util.KtimeToRealMilli(f.Val.FlowStartMilliSecond / 1000000)
+		if err != nil {
+			return nil, err
+		}
+		end, err := util.KtimeToRealMilli(f.Val.FlowEndMilliSecond / 1000000)
+		if err != nil {
+			return nil, err
+		}
+
 		flowTmp = append(flowTmp, map[string]interface{}{
 			"src":            util.ConvertUint32ToIP(f.Key.Saddr).String(),
 			"dst":            util.ConvertUint32ToIP(f.Key.Daddr).String(),
@@ -459,12 +468,12 @@ func ebpflowsToMapArray(flows []ebpfmap.Flow) []map[string]interface{} {
 			"pkts":           f.Val.FlowPkts,
 			"bytes":          f.Val.FlowBytes,
 			"action":         f.Key.Mark,
-			"start":          f.Val.FlowStartMilliSecond,
-			"end":            f.Val.FlowEndMilliSecond,
+			"start":          start,
+			"end":            end,
 			"finished":       f.Val.Finished,
 		})
 	}
-	return flowTmp
+	return flowTmp, nil
 }
 
 func tozap(m map[string]interface{}) []interface{} {
@@ -476,7 +485,11 @@ func tozap(m map[string]interface{}) []interface{} {
 }
 
 func FlowOutputLog(flows []ebpfmap.Flow, out string, o ipfix.OutputLog) error {
-	flowTmp := ebpflowsToMapArray(flows)
+	flowTmp, err := ebpflowsToMapArray(flows)
+	if err != nil {
+		return err
+	}
+
 	for _, h := range o.Hooks {
 		var err error
 		flowTmp, err = h.ExecuteBatch(flowTmp)
