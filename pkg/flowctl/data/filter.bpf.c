@@ -214,13 +214,11 @@ static inline void record(const struct tcphdr *th, const struct iphdr *ih,
 }
 
 static inline int
-process_ipv4_tcp(struct __sk_buff *skb, __u8 encap_with)
+process_ipv4_tcp(struct __sk_buff *skb, __u64 offset)
 {
   __u64 data = skb->data;
   __u64 data_end = skb->data_end;
-
-  if (encap_with == IPPROTO_IPIP)
-    data += sizeof(struct iphdr);
+  data += offset;
 
   struct iphdr *ih = (struct iphdr *)(data + sizeof(struct ethhdr));
   assert_len(ih, data_end);
@@ -234,14 +232,14 @@ process_ipv4_tcp(struct __sk_buff *skb, __u8 encap_with)
 }
 
 static inline int
-process_ipv4_icmp(struct __sk_buff *skb, __u8 encap_with)
+process_ipv4_icmp(struct __sk_buff *skb, __u64 offset)
 {
   // bpf_printk("icmp packet");
   return TC_ACT_OK;
 }
 
 static inline int
-process_ipv4_udp(struct __sk_buff *skb, __u8 encap_with)
+process_ipv4_udp(struct __sk_buff *skb, __u64 offset)
 {
   // bpf_printk("udp packet");
   return TC_ACT_OK;
@@ -256,17 +254,21 @@ process_ipv4_ipip(struct __sk_buff *skb)
 
   struct iphdr *outer_ih = (struct iphdr *)(data + sizeof(struct ethhdr));
   assert_len(outer_ih, data_end);
+  __u64 outer_ih_len = outer_ih->ihl * 4;
 
-  struct iphdr *inner_ih = (struct iphdr *)((char *)outer_ih + sizeof(struct iphdr));
+  struct iphdr *inner_ih = (struct iphdr *)((char *)outer_ih + outer_ih_len);
   assert_len(inner_ih, data_end);
+
+  if (inner_ih->ihl < 5)
+    return TC_ACT_SHOT;
 
   switch (inner_ih->protocol) {
   case IPPROTO_ICMP:
-    return process_ipv4_icmp(skb, IPPROTO_IPIP);
+    return process_ipv4_icmp(skb, outer_ih_len);
   case IPPROTO_TCP:
-    return process_ipv4_tcp(skb, IPPROTO_IPIP);
+    return process_ipv4_tcp(skb, outer_ih_len);
   case IPPROTO_UDP:
-    return process_ipv4_udp(skb, IPPROTO_IPIP);
+    return process_ipv4_udp(skb, outer_ih_len);
   default:
     return TC_ACT_OK;
   }
