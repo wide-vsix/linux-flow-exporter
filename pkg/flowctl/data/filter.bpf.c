@@ -214,15 +214,14 @@ static inline void record(const struct tcphdr *th, const struct iphdr *ih,
 }
 
 static inline int
-process_ipv4_tcp(struct __sk_buff *skb)
+process_ipv4_tcp(struct __sk_buff *skb, __u64 offset)
 {
   __u64 data = skb->data;
   __u64 data_end = skb->data_end;
-  __u64 pkt_len = 0;
+  data += offset;
 
   struct iphdr *ih = (struct iphdr *)(data + sizeof(struct ethhdr));
   assert_len(ih, data_end);
-  pkt_len = data_end - data;
 
   __u8 hdr_len = ih->ihl * 4;
   struct tcphdr *th = (struct tcphdr *)((char *)ih + hdr_len);
@@ -233,17 +232,46 @@ process_ipv4_tcp(struct __sk_buff *skb)
 }
 
 static inline int
-process_ipv4_icmp(struct __sk_buff *skb)
+process_ipv4_icmp(struct __sk_buff *skb, __u64 offset)
 {
   // bpf_printk("icmp packet");
   return TC_ACT_OK;
 }
 
 static inline int
-process_ipv4_udp(struct __sk_buff *skb)
+process_ipv4_udp(struct __sk_buff *skb, __u64 offset)
 {
   // bpf_printk("udp packet");
   return TC_ACT_OK;
+}
+
+static inline int
+process_ipv4_ipip(struct __sk_buff *skb)
+{
+  __u64 data = skb->data;
+  __u64 data_end = skb->data_end;
+  __u64 pkt_len = 0;
+
+  struct iphdr *outer_ih = (struct iphdr *)(data + sizeof(struct ethhdr));
+  assert_len(outer_ih, data_end);
+  __u64 outer_ih_len = outer_ih->ihl * 4;
+
+  struct iphdr *inner_ih = (struct iphdr *)((char *)outer_ih + outer_ih_len);
+  assert_len(inner_ih, data_end);
+
+  if (inner_ih->ihl < 5)
+    return TC_ACT_SHOT;
+
+  switch (inner_ih->protocol) {
+  case IPPROTO_ICMP:
+    return process_ipv4_icmp(skb, outer_ih_len);
+  case IPPROTO_TCP:
+    return process_ipv4_tcp(skb, outer_ih_len);
+  case IPPROTO_UDP:
+    return process_ipv4_udp(skb, outer_ih_len);
+  default:
+    return TC_ACT_OK;
+  }
 }
 
 static inline int
@@ -262,11 +290,14 @@ process_ipv4(struct __sk_buff *skb)
 
   switch (ih->protocol) {
   case IPPROTO_ICMP:
-    return process_ipv4_icmp(skb);
+    return process_ipv4_icmp(skb, 0);
   case IPPROTO_TCP:
-    return process_ipv4_tcp(skb);
+    return process_ipv4_tcp(skb, 0);
   case IPPROTO_UDP:
-    return process_ipv4_udp(skb);
+    return process_ipv4_udp(skb, 0);
+  /* encapsulated packets */
+  case IPPROTO_IPIP:
+    return process_ipv4_ipip(skb);
   default:
     return TC_ACT_OK;
   }
